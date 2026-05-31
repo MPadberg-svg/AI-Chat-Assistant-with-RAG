@@ -6,6 +6,8 @@ import Sidebar from "./components/Sidebar";
 import { useSSE } from "./hooks/useSSE";
 import { deleteDocument, listDocuments } from "./services/api";
 
+const DEFAULT_TOP_K = 5;
+
 export default function App() {
   const [documents, setDocuments] = useState([]);
   const [messages, setMessages] = useState([]);
@@ -53,7 +55,7 @@ export default function App() {
   const handleSend = async (question) => {
     setMessages((prev) => [...prev, { role: "user", content: question }]);
     setPendingQuestion(question);
-    await startStream(question, 5, conversationHistory);
+    await startStream(question, DEFAULT_TOP_K, conversationHistory);
   };
 
   const handleClear = () => {

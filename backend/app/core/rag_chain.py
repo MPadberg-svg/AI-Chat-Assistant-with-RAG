@@ -11,6 +11,8 @@ from app.core.config import get_settings
 from app.core.retriever import semantic_search
 from app.models.schemas import Message
 
+MAX_HISTORY_MESSAGES = 10
+
 
 async def rag_query(
     question: str, top_k: int, history: list[Message] | None = None
@@ -32,7 +34,7 @@ async def rag_query(
     ]
 
     client = AsyncOpenAI(api_key=settings.openai_api_key)
-    history_messages = (history or [])[-10:]
+    history_messages = (history or [])[-MAX_HISTORY_MESSAGES:]
     messages = [
         {
             "role": "system",
