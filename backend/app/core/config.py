@@ -5,6 +5,8 @@ from functools import lru_cache
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+__version__ = "1.0.0"
+
 
 class Settings(BaseSettings):
     """Typed application settings loaded from environment variables."""
