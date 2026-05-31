@@ -1,0 +1,74 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - ".github/workflows/codeql.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Read current version
+        id: current_version
+        run: |
+          version=$(python - <<'PY'
+          import re
+          from pathlib import Path
+
+          content = Path("backend/app/core/config.py").read_text(encoding="utf-8")
+          match = re.search(r'^__version__\s*=\s*"(\d+\.\d+\.\d+)"', content, re.MULTILINE)
+          if not match:
+              raise SystemExit("__version__ not found")
+          print(match.group(1))
+          PY
+          )
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Get latest tag
+        id: latest_tag
+        run: |
+          latest=$(git describe --tags --abbrev=0 2>/dev/null || echo "none")
+          echo "tag=$latest" >> "$GITHUB_OUTPUT"
+      - name: Generate changelog
+        id: changelog
+        run: |
+          if [ "${{ steps.latest_tag.outputs.tag }}" = "none" ]; then
+            log=$(git log -n 30 --pretty=format:"- %s (%an)")
+          else
+            log=$(git log "${{ steps.latest_tag.outputs.tag }}..HEAD" -n 30 --pretty=format:"- %s (%an)")
+          fi
+          echo "changelog<<'EOF'" >> "$GITHUB_OUTPUT"
+          echo "$log" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+      - name: Compute new version
+        id: new_version
+        run: |
+          IFS='.' read -r major minor patch <<< "${{ steps.current_version.outputs.version }}"
+          patch=$((patch + 1))
+          echo "version=${major}.${minor}.${patch}" >> "$GITHUB_OUTPUT"
+      - name: Create tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "v${{ steps.new_version.outputs.version }}" -m "Release v${{ steps.new_version.outputs.version }}"
+      - name: Push tag
+        run: git push origin "v${{ steps.new_version.outputs.version }}"
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "v${{ steps.new_version.outputs.version }}"
+          name: "v${{ steps.new_version.outputs.version }}"
+          body: ${{ steps.changelog.outputs.changelog }}
