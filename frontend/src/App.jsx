@@ -9,7 +9,9 @@ import { deleteDocument, listDocuments } from "./services/api";
 export default function App() {
   const [documents, setDocuments] = useState([]);
   const [messages, setMessages] = useState([]);
-  const { answer, sources, isLoading, error, startStream } = useSSE();
+  const [conversationHistory, setConversationHistory] = useState([]);
+  const [pendingQuestion, setPendingQuestion] = useState(null);
+  const { answer, sources, isLoading, error, reset, startStream } = useSSE();
 
   const loadDocuments = async () => {
     try {
@@ -36,9 +38,29 @@ export default function App() {
     });
   }, [answer]);
 
+  useEffect(() => {
+    if (isLoading || !pendingQuestion) return;
+    if (!error) {
+      setConversationHistory((prev) => [
+        ...prev,
+        { role: "user", content: pendingQuestion },
+        { role: "assistant", content: answer },
+      ]);
+    }
+    setPendingQuestion(null);
+  }, [answer, error, isLoading, pendingQuestion]);
+
   const handleSend = async (question) => {
     setMessages((prev) => [...prev, { role: "user", content: question }]);
-    await startStream(question, 5);
+    setPendingQuestion(question);
+    await startStream(question, 5, conversationHistory);
+  };
+
+  const handleClear = () => {
+    setMessages([]);
+    setConversationHistory([]);
+    setPendingQuestion(null);
+    reset();
   };
 
   const handleUploaded = async (docId) => {
@@ -66,6 +88,14 @@ export default function App() {
         <h2 style={{ margin: 0 }}>RAG Chat Assistant</h2>
         <DocumentUpload onUploaded={handleUploaded} />
         <div style={{ color: error ? "#b00020" : "#555", fontSize: "13px" }}>{helperText}</div>
+        <button
+          type="button"
+          onClick={handleClear}
+          disabled={isLoading || (!messages.length && !conversationHistory.length)}
+          style={{ alignSelf: "flex-start" }}
+        >
+          Clear conversation
+        </button>
         <ChatWindow messages={messages} isLoading={isLoading} sources={sources} onSend={handleSend} />
       </section>
     </main>

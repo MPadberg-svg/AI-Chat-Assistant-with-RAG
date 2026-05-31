@@ -16,7 +16,7 @@ export const useSSE = () => {
     setError("");
   }, []);
 
-  const startStream = useCallback(async (question, topK = 5) => {
+  const startStream = useCallback(async (question, topK = 5, history = []) => {
     setIsLoading(true);
     setError("");
     setAnswer("");
@@ -45,7 +45,7 @@ export const useSSE = () => {
     };
 
     try {
-      const response = await sendMessage(question, topK);
+      const response = await sendMessage(question, topK, history);
       if (!response.ok || !response.body) {
         throw new Error("Failed to connect to chat stream.");
       }

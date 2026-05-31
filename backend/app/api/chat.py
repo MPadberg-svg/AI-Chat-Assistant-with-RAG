@@ -16,7 +16,7 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
     """Stream chat completions as server-sent events."""
 
     async def event_stream():
-        async for chunk in rag_query(payload.question, payload.top_k):
+        async for chunk in rag_query(payload.question, payload.top_k, payload.history):
             yield f"data: {chunk}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")

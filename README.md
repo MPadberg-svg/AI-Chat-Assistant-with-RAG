@@ -159,7 +159,11 @@ Stream a context-grounded answer as Server-Sent Events.
 ```json
 {
   "question": "What are the main findings?",
-  "top_k": 5
+  "top_k": 5,
+  "history": [
+    { "role": "user", "content": "Summarize the report." },
+    { "role": "assistant", "content": "It highlights revenue growth and retention." }
+  ]
 }
 ```
 
