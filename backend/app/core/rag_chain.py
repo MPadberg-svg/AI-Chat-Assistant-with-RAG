@@ -44,10 +44,7 @@ async def rag_query(
                 "Always cite sources inline using [doc_id p.N]."
             ),
         },
-        *(
-            {"role": item.role, "content": item.content}
-            for item in history_messages
-        ),
+        *({"role": item.role, "content": item.content} for item in history_messages),
         {
             "role": "user",
             "content": f"Question: {question}\n\nContext:\n{context_text}",
