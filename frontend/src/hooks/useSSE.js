@@ -22,36 +22,34 @@ export const useSSE = () => {
     setAnswer("");
     setSources([]);
 
-    let sseBuffer = "";
-    let sourceBuffer = "";
-    let inSources = false;
-    let finalAnswer = "";
-
-    const appendAnswer = (chunk) => {
-      if (!chunk) return;
-      finalAnswer += chunk;
-      setAnswer((prev) => prev + chunk);
-    };
-
-    const processPayload = (payload) => {
-      if (!inSources) {
-        const markerIndex = payload.indexOf(MARKER);
-        if (markerIndex >= 0) {
-          const answerChunk = payload.slice(0, markerIndex);
-          appendAnswer(answerChunk);
-          inSources = true;
-          sourceBuffer += payload.slice(markerIndex + MARKER.length);
-        } else {
-          appendAnswer(payload);
-        }
-      } else {
-        sourceBuffer += payload;
-      }
-    };
-
-    let caughtError = null;
-
     try {
+      let sseBuffer = "";
+      let sourceBuffer = "";
+      let inSources = false;
+      let finalAnswer = "";
+
+      const appendAnswer = (chunk) => {
+        if (!chunk) return;
+        finalAnswer += chunk;
+        setAnswer((prev) => prev + chunk);
+      };
+
+      const processPayload = (payload) => {
+        if (!inSources) {
+          const markerIndex = payload.indexOf(MARKER);
+          if (markerIndex >= 0) {
+            const answerChunk = payload.slice(0, markerIndex);
+            appendAnswer(answerChunk);
+            inSources = true;
+            sourceBuffer += payload.slice(markerIndex + MARKER.length);
+          } else {
+            appendAnswer(payload);
+          }
+        } else {
+          sourceBuffer += payload;
+        }
+      };
+
       const response = await sendMessage(question, topK, history);
       if (!response.ok || !response.body) {
         throw new Error("Failed to connect to chat stream.");
@@ -87,17 +85,13 @@ export const useSSE = () => {
       if (sourceBuffer.trim()) {
         setSources(JSON.parse(sourceBuffer));
       }
+      return finalAnswer;
     } catch (streamError) {
-      caughtError = streamError;
       setError(streamError instanceof Error ? streamError.message : "Streaming failed.");
+      return null;
     } finally {
       setIsLoading(false);
     }
-
-    if (caughtError) {
-      return null;
-    }
-    return finalAnswer;
   }, []);
 
   return { answer, sources, isLoading, error, reset, startStream };
