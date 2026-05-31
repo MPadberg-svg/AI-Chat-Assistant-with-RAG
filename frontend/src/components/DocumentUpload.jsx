@@ -40,6 +40,10 @@ export default function DocumentUpload({ onUploaded }) {
     }
   };
 
+  const dropZoneClasses = `border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
+    isDragging ? "border-blue-500 bg-blue-50 text-blue-600" : "border-gray-300 text-gray-500"
+  }`;
+
   return (
     <div>
       <div
@@ -50,14 +54,7 @@ export default function DocumentUpload({ onUploaded }) {
         }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={onDrop}
-        style={{
-          border: `2px dashed ${isDragging ? "#4b73ff" : "#bbb"}`,
-          borderRadius: "8px",
-          padding: "20px",
-          cursor: "pointer",
-          textAlign: "center",
-          background: isDragging ? "#f2f6ff" : "transparent",
-        }}
+        className={dropZoneClasses}
       >
         Drag and drop PDF/TXT/DOCX here, or click to upload
       </div>
@@ -66,25 +63,21 @@ export default function DocumentUpload({ onUploaded }) {
         type="file"
         accept=".pdf,.txt,.docx"
         onChange={onFileChange}
-        style={{ display: "none" }}
+        className="hidden"
       />
       {progress > 0 && progress < 100 && (
-        <div style={{ marginTop: "8px" }}>
-          <div style={{ height: "8px", background: "#eee", borderRadius: "999px" }}>
+        <div className="mt-2">
+          <div className="h-2 rounded-full bg-gray-200">
             <div
-              style={{
-                width: `${progress}%`,
-                height: "100%",
-                background: "#4b73ff",
-                borderRadius: "999px",
-              }}
+              className="h-full rounded-full bg-blue-500 transition-all"
+              style={{ width: `${progress}%` }}
             />
           </div>
         </div>
       )}
       {toast && (
-        <div style={{ marginTop: "8px", color: "#b00020", fontSize: "13px" }} role="alert">
-          {toast}
+        <div className="mt-2 text-sm text-red-600" role="alert">
+          ⚠ {toast}
         </div>
       )}
     </div>
