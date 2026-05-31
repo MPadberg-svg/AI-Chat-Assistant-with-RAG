@@ -16,36 +16,41 @@ export const useSSE = () => {
     setError("");
   }, []);
 
-  const startStream = useCallback(async (question, topK = 5) => {
+  const startStream = useCallback(async (question, topK = 5, history = []) => {
     setIsLoading(true);
     setError("");
     setAnswer("");
     setSources([]);
 
-    let sseBuffer = "";
-    let sourceBuffer = "";
-    let inSources = false;
-
-    const processPayload = (payload) => {
-      if (!inSources) {
-        const markerIndex = payload.indexOf(MARKER);
-        if (markerIndex >= 0) {
-          const answerChunk = payload.slice(0, markerIndex);
-          if (answerChunk) {
-            setAnswer((prev) => prev + answerChunk);
-          }
-          inSources = true;
-          sourceBuffer += payload.slice(markerIndex + MARKER.length);
-        } else {
-          setAnswer((prev) => prev + payload);
-        }
-      } else {
-        sourceBuffer += payload;
-      }
-    };
-
     try {
-      const response = await sendMessage(question, topK);
+      let sseBuffer = "";
+      let sourceBuffer = "";
+      let inSources = false;
+      let finalAnswer = "";
+
+      const appendAnswer = (chunk) => {
+        if (!chunk) return;
+        finalAnswer += chunk;
+        setAnswer((prev) => prev + chunk);
+      };
+
+      const processPayload = (payload) => {
+        if (!inSources) {
+          const markerIndex = payload.indexOf(MARKER);
+          if (markerIndex >= 0) {
+            const answerChunk = payload.slice(0, markerIndex);
+            appendAnswer(answerChunk);
+            inSources = true;
+            sourceBuffer += payload.slice(markerIndex + MARKER.length);
+          } else {
+            appendAnswer(payload);
+          }
+        } else {
+          sourceBuffer += payload;
+        }
+      };
+
+      const response = await sendMessage(question, topK, history);
       if (!response.ok || !response.body) {
         throw new Error("Failed to connect to chat stream.");
       }
@@ -80,8 +85,10 @@ export const useSSE = () => {
       if (sourceBuffer.trim()) {
         setSources(JSON.parse(sourceBuffer));
       }
+      return finalAnswer;
     } catch (streamError) {
       setError(streamError instanceof Error ? streamError.message : "Streaming failed.");
+      return null;
     } finally {
       setIsLoading(false);
     }

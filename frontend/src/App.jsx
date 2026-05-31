@@ -6,10 +6,13 @@ import Sidebar from "./components/Sidebar";
 import { useSSE } from "./hooks/useSSE";
 import { deleteDocument, listDocuments } from "./services/api";
 
+const DEFAULT_TOP_K = 5;
+
 export default function App() {
   const [documents, setDocuments] = useState([]);
   const [messages, setMessages] = useState([]);
-  const { answer, sources, isLoading, error, startStream } = useSSE();
+  const [conversationHistory, setConversationHistory] = useState([]);
+  const { answer, sources, isLoading, error, reset, startStream } = useSSE();
 
   const loadDocuments = async () => {
     try {
@@ -38,7 +41,20 @@ export default function App() {
 
   const handleSend = async (question) => {
     setMessages((prev) => [...prev, { role: "user", content: question }]);
-    await startStream(question, 5);
+    const finalAnswer = await startStream(question, DEFAULT_TOP_K, conversationHistory);
+    if (finalAnswer !== null) {
+      setConversationHistory((prev) => [
+        ...prev,
+        { role: "user", content: question },
+        { role: "assistant", content: finalAnswer },
+      ]);
+    }
+  };
+
+  const handleClear = () => {
+    setMessages([]);
+    setConversationHistory([]);
+    reset();
   };
 
   const handleUploaded = async (docId) => {
@@ -66,6 +82,14 @@ export default function App() {
         <h2 style={{ margin: 0 }}>RAG Chat Assistant</h2>
         <DocumentUpload onUploaded={handleUploaded} />
         <div style={{ color: error ? "#b00020" : "#555", fontSize: "13px" }}>{helperText}</div>
+        <button
+          type="button"
+          onClick={handleClear}
+          disabled={isLoading || (!messages.length && !conversationHistory.length)}
+          style={{ alignSelf: "flex-start" }}
+        >
+          Clear conversation
+        </button>
         <ChatWindow messages={messages} isLoading={isLoading} sources={sources} onSend={handleSend} />
       </section>
     </main>

@@ -23,11 +23,11 @@ export const deleteDocument = async (docId) => {
   await api.delete(`/documents/${encodeURIComponent(docId)}`);
 };
 
-export const sendMessage = async (question, top_k = 5) => {
+export const sendMessage = async (question, top_k = 5, history = []) => {
   return fetch(`${api.defaults.baseURL}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question, top_k }),
+    body: JSON.stringify({ question, top_k, history }),
   });
 };
 
