@@ -12,7 +12,6 @@ export default function App() {
   const [documents, setDocuments] = useState([]);
   const [messages, setMessages] = useState([]);
   const [conversationHistory, setConversationHistory] = useState([]);
-  const [pendingQuestion, setPendingQuestion] = useState(null);
   const { answer, sources, isLoading, error, reset, startStream } = useSSE();
 
   const loadDocuments = async () => {
@@ -40,28 +39,21 @@ export default function App() {
     });
   }, [answer]);
 
-  useEffect(() => {
-    if (isLoading || !pendingQuestion) return;
-    if (!error) {
-      setConversationHistory((prev) => [
-        ...prev,
-        { role: "user", content: pendingQuestion },
-        { role: "assistant", content: answer },
-      ]);
-    }
-    setPendingQuestion(null);
-  }, [answer, error, isLoading, pendingQuestion]);
-
   const handleSend = async (question) => {
     setMessages((prev) => [...prev, { role: "user", content: question }]);
-    setPendingQuestion(question);
-    await startStream(question, DEFAULT_TOP_K, conversationHistory);
+    const finalAnswer = await startStream(question, DEFAULT_TOP_K, conversationHistory);
+    if (finalAnswer !== null) {
+      setConversationHistory((prev) => [
+        ...prev,
+        { role: "user", content: question },
+        { role: "assistant", content: finalAnswer },
+      ]);
+    }
   };
 
   const handleClear = () => {
     setMessages([]);
     setConversationHistory([]);
-    setPendingQuestion(null);
     reset();
   };
 

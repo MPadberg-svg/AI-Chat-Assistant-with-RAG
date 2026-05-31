@@ -25,24 +25,31 @@ export const useSSE = () => {
     let sseBuffer = "";
     let sourceBuffer = "";
     let inSources = false;
+    let finalAnswer = "";
+
+    const appendAnswer = (chunk) => {
+      if (!chunk) return;
+      finalAnswer += chunk;
+      setAnswer((prev) => prev + chunk);
+    };
 
     const processPayload = (payload) => {
       if (!inSources) {
         const markerIndex = payload.indexOf(MARKER);
         if (markerIndex >= 0) {
           const answerChunk = payload.slice(0, markerIndex);
-          if (answerChunk) {
-            setAnswer((prev) => prev + answerChunk);
-          }
+          appendAnswer(answerChunk);
           inSources = true;
           sourceBuffer += payload.slice(markerIndex + MARKER.length);
         } else {
-          setAnswer((prev) => prev + payload);
+          appendAnswer(payload);
         }
       } else {
         sourceBuffer += payload;
       }
     };
+
+    let caughtError = null;
 
     try {
       const response = await sendMessage(question, topK, history);
@@ -81,10 +88,16 @@ export const useSSE = () => {
         setSources(JSON.parse(sourceBuffer));
       }
     } catch (streamError) {
+      caughtError = streamError;
       setError(streamError instanceof Error ? streamError.message : "Streaming failed.");
     } finally {
       setIsLoading(false);
     }
+
+    if (caughtError) {
+      return null;
+    }
+    return finalAnswer;
   }, []);
 
   return { answer, sources, isLoading, error, reset, startStream };

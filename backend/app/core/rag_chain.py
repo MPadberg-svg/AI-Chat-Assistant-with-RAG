@@ -35,6 +35,9 @@ async def rag_query(
 
     client = AsyncOpenAI(api_key=settings.openai_api_key)
     history_messages = (history or [])[-MAX_HISTORY_MESSAGES:]
+    history_payload = [
+        {"role": item.role, "content": item.content} for item in history_messages
+    ]
     messages = [
         {
             "role": "system",
@@ -46,7 +49,7 @@ async def rag_query(
                 "Always cite sources inline using [doc_id p.N]."
             ),
         },
-        *({"role": item.role, "content": item.content} for item in history_messages),
+        *history_payload,
         {
             "role": "user",
             "content": f"Question: {question}\n\nContext:\n{context_text}",
