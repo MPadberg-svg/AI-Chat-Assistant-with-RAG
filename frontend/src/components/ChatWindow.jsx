@@ -18,63 +18,46 @@ export default function ChatWindow({ messages, isLoading, sources, onSend }) {
   };
 
   return (
-    <section style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-      <div
-        ref={containerRef}
-        style={{
-          flex: 1,
-          overflowY: "auto",
-          border: "1px solid #ddd",
-          borderRadius: "8px",
-          padding: "12px",
-          background: "#fff",
-        }}
-      >
+    <section className="flex flex-1 flex-col">
+      <div ref={containerRef} className="flex-1 space-y-3 overflow-y-auto rounded-xl border bg-white p-4">
         {messages.map((message, index) => (
-          <div
-            key={index}
-            style={{
-              marginBottom: "8px",
-              textAlign: message.role === "user" ? "right" : "left",
-            }}
-          >
+          <div key={index} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
             <span
-              style={{
-                display: "inline-block",
-                background: message.role === "user" ? "#dff7df" : "#f4f4f4",
-                borderRadius: "10px",
-                padding: "8px 10px",
-                maxWidth: "80%",
-              }}
+              className={
+                message.role === "user"
+                  ? "ml-auto max-w-xs rounded-2xl rounded-br-sm bg-blue-600 px-4 py-2 text-white"
+                  : "max-w-prose rounded-2xl rounded-bl-sm bg-gray-100 px-4 py-2 text-gray-800"
+              }
             >
               {message.content}
             </span>
           </div>
         ))}
         {isLoading && (
-          <div style={{ marginBottom: "8px" }}>
-            <span
-              style={{
-                display: "inline-block",
-                background: "#f4f4f4",
-                borderRadius: "10px",
-                padding: "8px 10px",
-              }}
-            >
-              <span style={{ opacity: 0.6 }}>Generating answer...</span>
-            </span>
+          <div className="flex justify-start">
+            <div className="rounded-2xl rounded-bl-sm bg-gray-100 px-4 py-3">
+              <div className="space-y-2 animate-pulse">
+                <div className="h-2 w-24 rounded bg-gray-200" />
+                <div className="h-2 w-32 rounded bg-gray-200" />
+                <div className="h-2 w-20 rounded bg-gray-200" />
+              </div>
+            </div>
           </div>
         )}
         <SourceCitations sources={sources} />
       </div>
-      <form onSubmit={submit} style={{ display: "flex", marginTop: "12px", gap: "8px" }}>
+      <form onSubmit={submit} className="mt-3 flex gap-2">
         <input
           value={question}
           onChange={(event) => setQuestion(event.target.value)}
           placeholder="Ask a question about your uploaded documents"
-          style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ccc" }}
+          className="flex-1 rounded-xl border px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
-        <button type="submit" disabled={isLoading}>
+        <button
+          type="submit"
+          disabled={isLoading}
+          className="rounded-xl bg-blue-600 px-5 py-2 text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+        >
           Send
         </button>
       </form>

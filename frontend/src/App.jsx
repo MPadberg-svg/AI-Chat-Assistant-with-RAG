@@ -76,17 +76,17 @@ export default function App() {
   }, [error]);
 
   return (
-    <main style={{ fontFamily: "Arial, sans-serif", height: "100vh", display: "flex" }}>
+    <main className="flex h-screen font-sans">
       <Sidebar documents={documents} onDelete={handleDelete} />
-      <section style={{ flex: 1, display: "flex", flexDirection: "column", padding: "16px", gap: "12px" }}>
-        <h2 style={{ margin: 0 }}>RAG Chat Assistant</h2>
+      <section className="flex flex-1 flex-col gap-3 bg-gray-50 p-4">
+        <h2 className="text-xl font-semibold">🧠 RAG Chat Assistant</h2>
         <DocumentUpload onUploaded={handleUploaded} />
-        <div style={{ color: error ? "#b00020" : "#555", fontSize: "13px" }}>{helperText}</div>
+        <div className={`text-sm ${error ? "text-red-600" : "text-gray-600"}`}>{helperText}</div>
         <button
           type="button"
           onClick={handleClear}
           disabled={isLoading || (!messages.length && !conversationHistory.length)}
-          style={{ alignSelf: "flex-start" }}
+          className="self-start text-sm font-medium text-blue-600 transition-colors hover:text-blue-700 disabled:opacity-50"
         >
           Clear conversation
         </button>
