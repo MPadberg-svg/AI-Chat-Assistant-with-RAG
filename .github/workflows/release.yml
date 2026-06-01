@@ -50,7 +50,7 @@ jobs:
           else
             log=$(git log "${{ steps.latest_tag.outputs.tag }}..HEAD" -n 30 --pretty=format:"- %s (%an)")
           fi
-          echo "changelog<<'EOF'" >> "$GITHUB_OUTPUT"
+          echo "changelog<<EOF" >> "$GITHUB_OUTPUT"
           echo "$log" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
       - name: Compute new version
