@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.chat import router as chat_router
@@ -43,6 +43,6 @@ app.include_router(documents_router, prefix="/api")
 
 
 @app.get("/api/health")
-async def health_check() -> dict[str, str]:
+async def health_check(request: Request) -> dict[str, str]:
     """Health check endpoint."""
-    return {"status": "ok", "chroma": "connected"}
+    return {"status": "ok", "chroma": request.app.state.chroma_status}
