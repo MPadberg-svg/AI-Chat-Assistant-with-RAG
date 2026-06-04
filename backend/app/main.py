@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.chat import router as chat_router
@@ -17,13 +17,12 @@ from app.core.embeddings import get_collection
 async def lifespan(app: FastAPI):
     """Warm up dependencies on startup."""
     get_settings()
-    chroma_status = "connected"
+    app.state.chroma_status = "disconnected"
     try:
         get_collection().count()
+        app.state.chroma_status = "connected"
     except Exception:
-        chroma_status = "disconnected"
         raise
-    app.state.chroma_status = chroma_status
     yield
 
 
@@ -43,6 +42,7 @@ app.include_router(documents_router, prefix="/api")
 
 
 @app.get("/api/health")
-async def health_check() -> dict[str, str]:
+async def health_check(request: Request) -> dict[str, str]:
     """Health check endpoint."""
-    return {"status": "ok", "chroma": "connected"}
+    chroma_status = getattr(request.app.state, "chroma_status", "disconnected")
+    return {"status": "ok", "chroma": chroma_status}
