@@ -43,7 +43,7 @@ jobs:
           queries: security-extended,security-and-quality
       - name: Install frontend dependencies
         if: matrix.language == 'javascript-typescript'
-        run: cd frontend && npm ci
+        run: cd frontend && NODE_ENV=development npm ci
       - name: Install backend dependencies
         if: matrix.language == 'python'
         run: pip install -r backend/requirements.txt

@@ -1,8 +1,8 @@
 import axios from "axios";
 
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:8000/api",
-});
+const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+
+const api = axios.create({ baseURL: BASE_URL });
 
 export const uploadDocument = async (file, onUploadProgress) => {
   const formData = new FormData();
@@ -24,7 +24,7 @@ export const deleteDocument = async (docId) => {
 };
 
 export const sendMessage = async (question, top_k = 5, history = []) => {
-  return fetch(`${api.defaults.baseURL}/chat`, {
+  return fetch(`${BASE_URL}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ question, top_k, history }),

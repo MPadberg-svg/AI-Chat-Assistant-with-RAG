@@ -78,3 +78,21 @@ async def test_rag_query_streams_text_and_sources(monkeypatch) -> None:
     sources = json.loads(parts[-1].split("__SOURCES__", 1)[1])
     assert sources[0]["doc_id"] == "file.txt"
     assert sources[0]["page"] == 2
+
+
+@pytest.mark.asyncio
+async def test_rag_query_no_context(monkeypatch) -> None:
+    """rag_query should handle empty context gracefully."""
+    monkeypatch.setattr(
+        rag_chain, "semantic_search", lambda _query, top_k: []
+    )
+    monkeypatch.setattr(rag_chain, "AsyncOpenAI", FakeClient)
+    monkeypatch.setattr(
+        rag_chain, "get_settings", lambda: SimpleNamespace(openai_api_key="test")
+    )
+
+    parts = [part async for part in rag_chain.rag_query("question", 5)]
+
+    assert parts[-1].startswith("__SOURCES__")
+    sources = json.loads(parts[-1].split("__SOURCES__", 1)[1])
+    assert sources == []

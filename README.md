@@ -15,14 +15,17 @@ A production-ready **Retrieval-Augmented Generation** chat assistant. Upload you
 
 ## Features
 
-- **Document ingestion** — Upload PDF, DOCX, or TXT files; they are chunked, embedded, and stored in a persistent ChromaDB vector store.
-- **Grounded answers** — The LLM only answers from retrieved context. If the context is insufficient, it says so.
-- **Streaming responses** — Answers are streamed token-by-token via Server-Sent Events. No waiting for the full response.
-- **Inline citations** — Every answer includes `[doc_id p.N]` source references; a citation panel shows confidence scores.
-- **Multi-turn conversations** — The last 10 exchanges are sent as history on every request, enabling follow-up questions.
-- **Markdown rendering** — Assistant messages render with full GFM support, syntax-highlighted code blocks, and tables.
-- **Automated releases** — Every push to `main` creates a versioned GitHub Release with a generated changelog.
-- **Security scanning** — CodeQL analyzes both Python and JavaScript/TypeScript on every push and on a weekly schedule.
+- **Document ingestion** — Upload PDF, DOCX, or TXT files up to 20 MB; chunked, embedded, and persisted in ChromaDB.
+- **Grounded answers** — The LLM only answers from retrieved context. If context is insufficient, it says so.
+- **Streaming responses** — Token-by-token via Server-Sent Events. No waiting for the full response.
+- **Inline citations** — Every answer includes `[doc_id p.N]` references; a citation panel shows confidence scores.
+- **Multi-turn conversations** — Last 10 exchanges sent as history, enabling follow-up questions.
+- **Markdown rendering** — Full GFM support, syntax-highlighted code blocks, and tables.
+- **File size guard** — Uploads exceeding 20 MB are rejected with HTTP 413 before any processing.
+- **404 on missing delete** — Deleting a non-existent document returns HTTP 404, not a silent 200.
+- **Live health endpoint** — `/api/health` reports real Chroma connectivity and document count.
+- **Automated releases** — Every push to `main` creates a versioned GitHub Release with changelog.
+- **Security scanning** — CodeQL analyzes Python and JS/TS on every push and weekly.
 
 ---
 
@@ -50,8 +53,6 @@ ChromaDB vector store        System prompt + history + context
                                (SSE frames)      (doc_id, page, score)
 ```
 
-The backend streams tokens via SSE. A custom `__SOURCES__` marker at the end of the stream carries a JSON array of cited documents — no extra HTTP round-trip needed.
-
 ---
 
 ## Tech Stack
@@ -67,8 +68,8 @@ The backend streams tokens via SSE. A custom `__SOURCES__` marker at the end of 
 | Styling | Tailwind CSS 3.4 + `@tailwindcss/typography` |
 | Markdown | `react-markdown` + `remark-gfm` + `rehype-highlight` |
 | HTTP | Axios (REST) + native `fetch` (SSE streaming) |
-| Containerization | Docker Compose (multi-stage builds) |
-| CI | GitHub Actions — lint, test, docker build |
+| Containerization | Docker Compose (multi-stage builds, healthcheck) |
+| CI | GitHub Actions — lint, test, docker build (with concurrency) |
 | Security | GitHub CodeQL (Python + JS/TS, weekly scan) |
 | Releases | Automated GitHub Releases with changelog generation |
 
@@ -78,46 +79,45 @@ The backend streams tokens via SSE. A custom `__SOURCES__` marker at the end of 
 
 ```
 .
-├── .env.example                        # All environment variables with defaults
-├── .flake8                             # Flake8 config (max-line-length = 88)
+├── .env.example
+├── .flake8
 ├── docker-compose.yml
 ├── .github/
 │   └── workflows/
-│       ├── ci.yml                      # lint → test → docker build
-│       ├── codeql.yml                  # Security scanning (Python + JS/TS)
-│       └── release.yml                 # Auto-versioned GitHub Releases
+│       ├── ci.yml          # lint → test → docker build (concurrency cancellation)
+│       ├── codeql.yml      # Security scanning (Python + JS/TS)
+│       └── release.yml     # Auto-versioned GitHub Releases
 │
 ├── backend/
-│   ├── Dockerfile                      # python:3.11-slim, non-root user
+│   ├── Dockerfile
 │   ├── requirements.txt
-│   ├── pytest.ini                      # asyncio_mode = auto
+│   ├── pytest.ini          # asyncio_mode = auto
 │   └── app/
-│       ├── main.py                     # FastAPI entrypoint, lifespan, CORS
+│       ├── main.py         # FastAPI entrypoint, lifespan, CORS, health
 │       ├── core/
-│       │   ├── config.py               # Pydantic Settings, lru_cache, __version__
-│       │   ├── embeddings.py           # Ingest, chunk, embed, store, delete
-│       │   ├── retriever.py            # Semantic search + score normalization
-│       │   └── rag_chain.py            # OpenAI streaming, history, __SOURCES__
+│       │   ├── config.py   # Pydantic Settings, lru_cache, MAX_UPLOAD_BYTES
+│       │   ├── embeddings.py
+│       │   ├── retriever.py
+│       │   └── rag_chain.py
 │       ├── api/
-│       │   ├── chat.py                 # POST /api/chat → SSE StreamingResponse
-│       │   └── documents.py            # Upload / list / delete
+│       │   ├── chat.py     # POST /api/chat → SSE StreamingResponse
+│       │   └── documents.py # Upload (413 guard) / list / delete (404 guard)
 │       └── models/
-│           └── schemas.py              # ChatRequest, Message, DocumentInfo
+│           └── schemas.py
 │
 └── frontend/
-    ├── Dockerfile                      # node:20-alpine build → nginx:1.27-alpine
-    ├── nginx.conf                      # SPA routing (try_files fallback)
+    ├── Dockerfile          # node:22-alpine build → nginx:1.27-alpine
+    ├── nginx.conf          # SPA routing + gzip compression
+    ├── vite.config.js      # Manual chunk splitting (vendor + markdown)
     └── src/
-        ├── App.jsx                     # Root — state orchestration + history
+        ├── App.jsx
         ├── components/
-        │   ├── ChatWindow.jsx          # Messages, typing indicator, markdown
-        │   ├── DocumentUpload.jsx      # Upload with progress
-        │   ├── Sidebar.jsx             # Document list + delete
-        │   └── SourceCitations.jsx     # Citation panel with scores
-        ├── hooks/
-        │   └── useSSE.js               # SSE reader + __SOURCES__ buffer parser
-        └── services/
-            └── api.js                  # Axios wrappers + raw fetch for SSE
+        │   ├── ChatWindow.jsx
+        │   ├── DocumentUpload.jsx
+        │   ├── Sidebar.jsx
+        │   └── SourceCitations.jsx
+        ├── hooks/useSSE.js
+        └── services/api.js  # DRY BASE_URL constant
 ```
 
 ---
@@ -152,12 +152,6 @@ docker compose up --build
 | Swagger UI | http://localhost:8000/docs |
 | Health check | http://localhost:8000/api/health |
 
-### 3. Use it
-
-1. Upload a PDF, DOCX, or TXT file from the sidebar.
-2. Type a question in the chat input.
-3. The assistant streams a grounded answer with inline citations. Ask follow-up questions — conversation history is maintained automatically.
-
 ### Local development (without Docker)
 
 ```bash
@@ -168,7 +162,7 @@ OPENAI_API_KEY=your-key uvicorn app.main:app --reload
 
 # Frontend (separate terminal)
 cd frontend
-npm install
+NODE_ENV=development npm ci
 npm run dev
 ```
 
@@ -176,19 +170,16 @@ npm run dev
 
 ## Environment Variables
 
-All variables are defined in `.env.example`. Copy it to `.env` before running.
-
 | Variable | Default | Description |
 |---|---|---|
-| `OPENAI_API_KEY` | — | **Required.** Your OpenAI API key. Validated at startup. |
-| `CHROMA_PERSIST_DIR` | `./chroma_db` | Path where ChromaDB persists vector data. |
+| `OPENAI_API_KEY` | — | **Required.** Validated at startup. |
+| `CHROMA_PERSIST_DIR` | `./chroma_db` | ChromaDB persistence path. |
 | `CHUNK_SIZE` | `512` | Max characters per text chunk. |
-| `CHUNK_OVERLAP` | `50` | Character overlap between consecutive chunks. |
-| `TOP_K` | `5` | Number of nearest chunks retrieved per query (1–20). |
-| `CLIENT_URL` | `http://localhost:5173` | CORS-allowed origin for the frontend. |
-| `VITE_API_URL` | `http://localhost:8000/api` | API base URL used by the React app. |
-
-> **Production note:** Override `CLIENT_URL` and `VITE_API_URL` with your real domain before deploying.
+| `CHUNK_OVERLAP` | `50` | Overlap between consecutive chunks. |
+| `TOP_K` | `5` | Nearest chunks retrieved per query (1–20). |
+| `CLIENT_URL` | `http://localhost:5173` | CORS-allowed frontend origin. |
+| `VITE_API_URL` | `http://localhost:8000/api` | API base URL for the React app. |
+| `MAX_UPLOAD_BYTES` | `20971520` | Max upload size in bytes (default 20 MB). |
 
 ---
 
@@ -198,83 +189,42 @@ All variables are defined in `.env.example`. Copy it to `.env` before running.
 
 Stream a context-grounded answer as Server-Sent Events.
 
-**Request body**
-
 ```json
 {
   "question": "What are the main findings?",
   "top_k": 5,
   "history": [
     { "role": "user", "content": "Summarize the report." },
-    { "role": "assistant", "content": "It highlights revenue growth and customer retention." }
+    { "role": "assistant", "content": "It highlights revenue growth." }
   ]
 }
 ```
 
-`history` is optional. When provided, the last 10 messages are included in the prompt for multi-turn context.
-
-**Response** — `text/event-stream`
-
-Each SSE frame carries one token. The final frame carries the sources payload:
+Response — `text/event-stream`:
 
 ```
 data: The main findings show...
-
-data: ...that revenue increased by 12% [annual_report p.3].
-
-data: __SOURCES__[{"doc_id": "annual_report", "page": 3, "score": 0.94}]
+data: ...revenue increased by 12% [report p.3].
+data: __SOURCES__[{"doc_id": "report", "page": 3, "score": 0.94}]
 ```
-
----
 
 ### `POST /api/documents/upload`
 
-Upload and ingest a document into the vector store.
-
-**Request** — `multipart/form-data`, field `file`. Accepted: `.pdf`, `.docx`, `.txt`.
-
-**Response**
-
-```json
-{
-  "doc_id": "a3f1c2b0_annual_report",
-  "chunks": 24
-}
-```
-
----
+Upload and ingest a document. Returns `{"doc_id": "...", "chunks": 24}`.
+Returns **400** for unsupported formats, **413** if file exceeds 20 MB.
 
 ### `GET /api/documents`
 
 List all ingested document IDs.
 
-**Response**
-
-```json
-["a3f1c2b0_annual_report", "b9d4e1f2_user_manual"]
-```
-
----
-
 ### `DELETE /api/documents/{doc_id}`
 
-Remove a document and all its chunks from the vector store.
-
-**Response**
-
-```json
-{
-  "status": "deleted",
-  "doc_id": "a3f1c2b0_annual_report"
-}
-```
-
----
+Delete a document. Returns **404** if `doc_id` does not exist.
 
 ### `GET /api/health`
 
 ```json
-{ "status": "ok", "chroma": "connected" }
+{ "status": "ok", "chroma": "connected", "documents": 3 }
 ```
 
 ---
@@ -287,36 +237,20 @@ pip install -r requirements.txt
 OPENAI_API_KEY=test-key PYTHONPATH=. pytest -q
 ```
 
-Tests use monkeypatching — no real OpenAI API calls or ChromaDB writes are made during the test suite.
-
 ---
 
 ## CI / CD Pipeline
 
-### Continuous Integration
-
-On every push and pull request to `main`:
-
+**CI** (on every push/PR to `main`, with concurrency cancellation):
 ```
 lint          →  black --check + flake8
-test          →  pytest with monkeypatched dependencies
-docker-build  →  docker compose build (verifies both images)
+test          →  pytest (monkeypatched, no real API calls)
+docker-build  →  docker compose build
 ```
 
-### Security Scanning
+**CodeQL** — Python + JS/TS, every push + weekly schedule.
 
-CodeQL analyzes Python and JavaScript/TypeScript on every push and weekly (Mondays at 08:00 UTC), with results reported in the Security tab.
-
-### Automated Releases
-
-Every push to `main` that changes source files triggers the release workflow:
-
-1. Reads `__version__` from `backend/app/core/config.py`
-2. Increments the patch number automatically
-3. Creates a signed git tag
-4. Publishes a GitHub Release with a generated changelog from commit messages
-
-To bump a **minor** or **major** version, update `__version__` in `config.py` manually before pushing.
+**Releases** — Reads `__version__` from `config.py`, auto-increments patch, tags and publishes a GitHub Release with commit-based changelog. To bump minor/major, update `__version__` manually before pushing.
 
 ---
 

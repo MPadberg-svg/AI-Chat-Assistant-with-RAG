@@ -8,6 +8,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
+from app.core.config import get_settings
 from app.core.embeddings import delete_document, ingest_document, list_document_ids
 from app.models.schemas import DocumentInfo
 
@@ -24,8 +25,15 @@ async def upload_document(file: UploadFile = File(...)) -> DocumentInfo:
             status_code=400, detail="Only PDF, TXT, and DOCX files are supported"
         )
 
+    content = await file.read()
+    max_bytes = get_settings().max_upload_bytes
+    if len(content) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size is {max_bytes // (1024 * 1024)} MB",
+        )
+
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir="/tmp") as tmp:
-        content = await file.read()
         tmp.write(content)
         tmp_path = tmp.name
 
@@ -47,5 +55,10 @@ async def get_documents() -> list[str]:
 @router.delete("/{doc_id}")
 async def remove_document(doc_id: str) -> dict[str, str]:
     """Delete a document from the vector store."""
+    existing = list_document_ids()
+    if doc_id not in existing:
+        raise HTTPException(
+            status_code=404, detail=f"Document '{doc_id}' not found"
+        )
     delete_document(doc_id)
     return {"status": "deleted", "doc_id": doc_id}

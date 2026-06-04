@@ -5,7 +5,7 @@ from functools import lru_cache
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 
 class Settings(BaseSettings):
@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     chunk_overlap: int = Field(50, alias="CHUNK_OVERLAP")
     top_k: int = Field(5, alias="TOP_K")
     client_url: str = Field("http://localhost:5173", alias="CLIENT_URL")
+    max_upload_bytes: int = Field(20 * 1024 * 1024, alias="MAX_UPLOAD_BYTES")
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"

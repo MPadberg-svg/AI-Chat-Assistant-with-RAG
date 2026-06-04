@@ -16,7 +16,6 @@ from app.core.config import get_settings
 
 _COLLECTION_NAME = "documents"
 
-
 _client: chromadb.PersistentClient | None = None
 _collection: Any | None = None
 
