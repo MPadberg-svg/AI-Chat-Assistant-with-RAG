@@ -17,18 +17,18 @@ from app.core.embeddings import get_collection
 async def lifespan(app: FastAPI):
     """Warm up dependencies on startup."""
     get_settings()
-    chroma_status = "connected"
+    app.state.chroma_status = "disconnected"
     try:
         get_collection().count()
+        app.state.chroma_status = "connected"
     except Exception:
-        chroma_status = "disconnected"
         raise
-    app.state.chroma_status = chroma_status
     yield
 
 
 app = FastAPI(title="RAG Chat Assistant", lifespan=lifespan)
 settings = get_settings()
+app.state.chroma_status = "disconnected"
 
 app.add_middleware(
     CORSMiddleware,
