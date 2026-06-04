@@ -28,7 +28,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="RAG Chat Assistant", lifespan=lifespan)
 settings = get_settings()
-app.state.chroma_status = "disconnected"
 
 app.add_middleware(
     CORSMiddleware,
@@ -45,4 +44,5 @@ app.include_router(documents_router, prefix="/api")
 @app.get("/api/health")
 async def health_check(request: Request) -> dict[str, str]:
     """Health check endpoint."""
-    return {"status": "ok", "chroma": request.app.state.chroma_status}
+    chroma_status = getattr(request.app.state, "chroma_status", "disconnected")
+    return {"status": "ok", "chroma": chroma_status}
