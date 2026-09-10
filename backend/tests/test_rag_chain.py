@@ -83,9 +83,7 @@ async def test_rag_query_streams_text_and_sources(monkeypatch) -> None:
 @pytest.mark.asyncio
 async def test_rag_query_no_context(monkeypatch) -> None:
     """rag_query should handle empty context gracefully."""
-    monkeypatch.setattr(
-        rag_chain, "semantic_search", lambda _query, top_k: []
-    )
+    monkeypatch.setattr(rag_chain, "semantic_search", lambda _query, top_k: [])
     monkeypatch.setattr(rag_chain, "AsyncOpenAI", FakeClient)
     monkeypatch.setattr(
         rag_chain, "get_settings", lambda: SimpleNamespace(openai_api_key="test")

@@ -57,8 +57,6 @@ async def remove_document(doc_id: str) -> dict[str, str]:
     """Delete a document from the vector store."""
     existing = list_document_ids()
     if doc_id not in existing:
-        raise HTTPException(
-            status_code=404, detail=f"Document '{doc_id}' not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Document '{doc_id}' not found")
     delete_document(doc_id)
     return {"status": "deleted", "doc_id": doc_id}
