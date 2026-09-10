@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 from unittest.mock import patch
-
-import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -14,9 +12,7 @@ client = TestClient(app)
 
 def test_delete_nonexistent_document_returns_404() -> None:
     """DELETE /api/documents/{doc_id} should return 404 for unknown doc_id."""
-    with patch(
-        "app.api.documents.list_document_ids", return_value=[]
-    ):
+    with patch("app.api.documents.list_document_ids", return_value=[]):
         response = client.delete("/api/documents/nonexistent-id")
     assert response.status_code == 404
     assert "not found" in response.json()["detail"].lower()
