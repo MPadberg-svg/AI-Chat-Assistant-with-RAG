@@ -86,7 +86,7 @@ it was retrieved by the keyword side.
 | Containerization | Docker Compose (multi-stage builds, non-root, healthchecks) |
 | CI | GitHub Actions — lint, tests, coverage, frontend lint/format/test/build, docker smoke test |
 | Security | GitHub CodeQL + advisory dependency audit + Dependabot |
-| Tests | pytest (98) + Vitest (20) |
+| Tests | pytest (108) + Vitest (20) |
 
 ---
 
@@ -135,7 +135,7 @@ it was retrieved by the keyword side.
 │   │   │   └── documents.py # Upload / list / delete
 │   │   └── models/
 │   │       └── schemas.py
-│   └── tests/              # 98 tests
+│   └── tests/              # 108 tests
 │
 └── frontend/
     ├── Dockerfile          # node:22-alpine build → nginx:1.27-alpine
@@ -312,7 +312,7 @@ Returns **503** with `"status": "degraded"` when ChromaDB cannot be reached.
 ## Running Tests
 
 ```bash
-# Backend — 98 tests, 94% coverage
+# Backend — 108 tests, 94% coverage
 cd backend
 pip install -r requirements-dev.txt
 OPENAI_API_KEY=test-key PYTHONPATH=. pytest -q
@@ -328,8 +328,10 @@ npm run lint
 npm run format:check
 ```
 
-All tests run offline: OpenAI and ChromaDB are replaced with fakes, so no API
-key or network access is required.
+All tests run offline and need no API key. Most replace the OpenAI client and
+ChromaDB with fakes; `test_openai_contract.py` goes further and drives the
+**real** OpenAI SDK with a mocked HTTP transport, so an SDK upgrade that changes
+the client surface fails the build instead of production.
 
 ---
 

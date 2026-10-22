@@ -115,10 +115,12 @@ def settings_stub() -> SimpleNamespace:
 
 
 @pytest.fixture(autouse=True)
-def _reset_retriever_cache():
-    """Keep the module-level BM25 cache from leaking between tests."""
-    from app.core import retriever
+def _reset_module_caches():
+    """Keep module-level caches from leaking between tests."""
+    from app.core import rag_chain, retriever
 
     retriever.reset_index_cache()
+    rag_chain.reset_async_client()
     yield
     retriever.reset_index_cache()
+    rag_chain.reset_async_client()

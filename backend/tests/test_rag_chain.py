@@ -79,7 +79,9 @@ async def test_streams_tokens_then_sources(monkeypatch, patched_settings) -> Non
             }
         ],
     )
-    monkeypatch.setattr(rag_chain, "AsyncOpenAI", make_client(["Hello", " world"]))
+    monkeypatch.setattr(
+        rag_chain, "get_async_client", lambda: make_client(["Hello", " world"])()
+    )
 
     events = await collect()
 
@@ -92,7 +94,9 @@ async def test_streams_tokens_then_sources(monkeypatch, patched_settings) -> Non
 async def test_no_context_still_streams(monkeypatch, patched_settings) -> None:
     """An empty retrieval result should produce an empty sources list."""
     monkeypatch.setattr(rag_chain, "semantic_search", lambda _q, _k: [])
-    monkeypatch.setattr(rag_chain, "AsyncOpenAI", make_client(["No context."]))
+    monkeypatch.setattr(
+        rag_chain, "get_async_client", lambda: make_client(["No context."])()
+    )
 
     events = await collect()
 
@@ -121,7 +125,9 @@ async def test_llm_failure_emits_error_event(monkeypatch, patched_settings) -> N
     """An OpenAI failure must be reported rather than ending silently."""
     monkeypatch.setattr(rag_chain, "semantic_search", lambda _q, _k: [])
     monkeypatch.setattr(
-        rag_chain, "AsyncOpenAI", make_client(error=RuntimeError("rate limited"))
+        rag_chain,
+        "get_async_client",
+        lambda: make_client(error=RuntimeError("boom"))(),
     )
 
     events = await collect()
@@ -148,7 +154,7 @@ async def test_history_is_trimmed(monkeypatch, patched_settings) -> None:
             self.chat = SimpleNamespace(completions=CapturingCompletions())
 
     monkeypatch.setattr(rag_chain, "semantic_search", fake_search)
-    monkeypatch.setattr(rag_chain, "AsyncOpenAI", FakeClient)
+    monkeypatch.setattr(rag_chain, "get_async_client", lambda: FakeClient())
 
     history = [
         rag_chain.Message(role="user", content=f"q{index}") for index in range(10)
@@ -190,7 +196,7 @@ async def test_context_is_labelled_with_filename_and_page(
             }
         ],
     )
-    monkeypatch.setattr(rag_chain, "AsyncOpenAI", FakeClient)
+    monkeypatch.setattr(rag_chain, "get_async_client", lambda: FakeClient())
 
     await collect()
 
