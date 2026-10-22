@@ -83,14 +83,13 @@ jobs:
       - name: Build docker compose stack
         run: docker compose build
 
-  # Advisory only: reports known advisories without failing the pipeline.
-  # Flip `continue-on-error` to false once the dependency upgrades in
-  # CODE_REVIEW.md (P1-8) have landed.
+  # Advisory only: reports known advisories in the job log without turning
+  # the check red. Drop the `continue-on-error` entries once the dependency
+  # upgrades in CODE_REVIEW.md (P1-8) have landed, then the job gates again.
   security-audit:
     name: Dependency audit (advisory)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -99,6 +98,7 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
       - name: Audit Python dependencies
+        continue-on-error: true
         run: |
           pip install --quiet pip-audit
           pip-audit -r backend/requirements.txt --progress-spinner off
@@ -111,5 +111,6 @@ jobs:
         working-directory: frontend
         run: npm ci --no-audit --no-fund
       - name: Audit frontend dependencies
+        continue-on-error: true
         working-directory: frontend
         run: npm audit --omit=dev
