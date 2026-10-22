@@ -7,6 +7,31 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 GitHub Releases are generated automatically from commit messages; this file
 records the notable, user-facing changes.
 
+## [1.3.2] - 2026-10-22
+
+### Changed
+
+- **React 18.3 -> 19.3.** The component tree renders unchanged; a new
+  application-level render test covers it.
+- **Vite 7.3 -> 8.3 and @vitejs/plugin-react 5 -> 6.** Vite 8 bundles with
+  Rolldown, which rejects the object form of `manualChunks`; the chunk split is
+  now expressed as a function (portable back to Rollup).
+- **GitHub Actions modernised**: `checkout` v4 -> v7, `setup-node` v4 -> v7,
+  `setup-python` v5 -> v7, `action-gh-release` v2 -> v3. These are the ESM /
+  Node 24 runtimes; no inputs used by this repository were removed.
+- `package.json` declares `engines.node >=20.19.0`, the floor Vite 8 requires.
+
+### Added
+
+- `frontend/src/App.test.jsx`: renders the whole application tree and asserts
+  the `ErrorBoundary` contract, so a framework upgrade that breaks rendering
+  fails the build.
+
+### Not upgraded
+
+- **ESLint stays on 9.** `eslint-plugin-react@7.37.5` only declares support up
+  to ESLint 9; ESLint 10 installs only by overriding that peer requirement.
+
 ## [1.3.1] - 2026-10-22
 
 ### Changed
