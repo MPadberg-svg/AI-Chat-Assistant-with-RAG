@@ -11,7 +11,7 @@ const render = (content, sources = []) =>
       isLoading={false}
       sources={sources}
       onSend={() => {}}
-    />
+    />,
   );
 
 describe("ChatWindow markdown rendering", () => {
@@ -46,13 +46,10 @@ describe("ChatWindow markdown rendering", () => {
 });
 
 describe("SourceCitations", () => {
-  const renderSources = (sources) =>
-    renderToStaticMarkup(<SourceCitations sources={sources} />);
+  const renderSources = (sources) => renderToStaticMarkup(<SourceCitations sources={sources} />);
 
   it("renders a percentage for a valid score", () => {
-    const html = renderSources([
-      { doc_id: "a", filename: "runbook.pdf", page: 3, score: 0.75 },
-    ]);
+    const html = renderSources([{ doc_id: "a", filename: "runbook.pdf", page: 3, score: 0.75 }]);
 
     expect(html).toContain("runbook.pdf · p.3 · 75%");
   });
@@ -72,5 +69,36 @@ describe("SourceCitations", () => {
 
   it("renders nothing when there are no sources", () => {
     expect(renderSources([])).toBe("");
+  });
+});
+
+describe("streaming state", () => {
+  const renderLive = (props) =>
+    renderToStaticMarkup(
+      <ChatWindow
+        messages={[{ role: "user", content: "hi" }]}
+        isLoading
+        sources={[]}
+        onSend={() => {}}
+        {...props}
+      />,
+    );
+
+  it("renders the in-flight answer as markdown", () => {
+    const html = renderLive({ streamingAnswer: "**partial** answer" });
+
+    expect(html).toContain("<strong>partial</strong>");
+  });
+
+  it("shows the typing indicator before the first token arrives", () => {
+    const html = renderLive({ streamingAnswer: "" });
+
+    expect(html).toContain("animate-bounce");
+  });
+
+  it("does not show a typing indicator once tokens are streaming", () => {
+    const html = renderLive({ streamingAnswer: "first token" });
+
+    expect(html).not.toContain("animate-bounce");
   });
 });

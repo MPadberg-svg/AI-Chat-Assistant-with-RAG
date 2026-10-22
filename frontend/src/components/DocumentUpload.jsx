@@ -66,9 +66,7 @@ export default function DocumentUpload({ onUploaded }) {
   };
 
   const dropZoneClasses = `border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
-    isDragging
-      ? "border-blue-500 bg-blue-50 text-blue-600"
-      : "border-gray-300 text-gray-500"
+    isDragging ? "border-blue-500 bg-blue-50 text-blue-600" : "border-gray-300 text-gray-500"
   } ${isUploading ? "pointer-events-none opacity-60" : ""}`;
 
   return (

@@ -1,0 +1,14 @@
+[run]
+source = app
+branch = True
+omit =
+    */tests/*
+    */__init__.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
+    raise NotImplementedError
+show_missing = True
+skip_empty = True

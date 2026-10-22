@@ -95,7 +95,7 @@ export const useSSE = () => {
       setError(
         streamFailure instanceof Error
           ? streamFailure.message
-          : "Streaming failed. Please try again."
+          : "Streaming failed. Please try again.",
       );
       return null;
     } finally {

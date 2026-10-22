@@ -8,6 +8,7 @@ A production-ready **Retrieval-Augmented Generation** chat assistant. Upload you
 ![ChromaDB](https://img.shields.io/badge/ChromaDB-1.5-orange?logo=chromadb)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4-38BDF8?logo=tailwindcss)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker)
+![License](https://img.shields.io/badge/License-MIT-green)
 ![CI](https://github.com/MPadberg-svg/AI-Chat-Assistant-with-RAG/actions/workflows/ci.yml/badge.svg)
 ![CodeQL](https://github.com/MPadberg-svg/AI-Chat-Assistant-with-RAG/actions/workflows/codeql.yml/badge.svg)
 
@@ -15,6 +16,7 @@ A production-ready **Retrieval-Augmented Generation** chat assistant. Upload you
 
 ## Features
 
+- **Hybrid retrieval** — vector similarity fused with BM25 keyword search via reciprocal rank fusion, so exact identifiers (error codes, names, part numbers) are not lost to semantic blur.
 - **Document ingestion** — Upload PDF, DOCX or TXT files up to 20 MB; chunked, embedded and persisted in ChromaDB. DOCX table content is extracted too.
 - **Duplicate detection** — Re-uploading identical content returns the existing document instead of creating a duplicate.
 - **Grounded answers** — The LLM only answers from retrieved context. If the context is insufficient, it says so.
@@ -24,6 +26,7 @@ A production-ready **Retrieval-Augmented Generation** chat assistant. Upload you
 - **Markdown rendering** — Full GFM support, syntax-highlighted code blocks, and tables.
 - **Streaming upload guard** — The 20 MB limit is enforced while the file is being read, not after it is buffered in memory.
 - **Honest health endpoint** — `/api/health` performs a live ChromaDB check and returns `503` when it is unreachable.
+- **Request tracing** — Every response carries `X-Request-ID`, and all log lines emitted while handling a request are tagged with it.
 - **Optional hardening** — Bearer-token auth and per-client rate limiting, both off by default.
 - **Automated releases** — Every push to `main` creates a versioned GitHub Release with changelog.
 - **Security scanning** — CodeQL analyzes Python and JS/TS on every push and weekly.
@@ -39,23 +42,30 @@ Your document                           Your question
 Recursive text splitter              Query embedding
 (512-char chunks, 50 overlap)    (text-embedding-3-small)
      │                                       │
-     ▼                                       ▼
-Embedding model          ──────▶    Cosine search in ChromaDB
-(text-embedding-3-small)              (top-k nearest chunks)
+     ▼                                       │
+Embedding model                              │
+(text-embedding-3-small)                     │
      │                                       │
      ▼                                       ▼
-ChromaDB vector store        System prompt + history + context
-(persistent on disk)                         │
-                                             ▼
-                                    GPT-4o mini (streaming)
-                                             │
-                                             ▼
-                          SSE frames: token / sources / error
+ChromaDB vector store  ──────────▶   Cosine search ─┐
+(persistent on disk)                                │
+     │                                              ├─▶ Reciprocal rank
+     └── BM25 keyword index ──────▶  Lexical search ┘      fusion
+                                                              │
+                                                              ▼
+                                    System prompt + history + top-k context
+                                                              │
+                                                              ▼
+                                                    GPT-4o mini (streaming)
+                                                              │
+                                                              ▼
+                                       SSE frames: token / sources / error
 ```
 
-Both ingestion and querying use the **same** embedding model. Queries are sent to
-ChromaDB as vectors, and the collection is created in **cosine space**, so
-`score = 1 - distance` is a real 0–1 similarity.
+Both ingestion and querying use the **same** embedding model. The collection is
+created in **cosine space**, so the reported `score` is always a real 0–1
+similarity, and every returned chunk carries its true cosine score — even when
+it was retrieved by the keyword side.
 
 ---
 
@@ -64,18 +74,19 @@ ChromaDB as vectors, and the collection is created in **cosine space**, so
 | Layer | Technology |
 |---|---|
 | Backend API | FastAPI 0.159 + Uvicorn |
-| Vector store | ChromaDB 1.5 (persistent) |
+| Vector store | ChromaDB 1.5 (persistent, cosine space) |
 | Embeddings | OpenAI `text-embedding-3-small` |
 | LLM | OpenAI `gpt-4o-mini` |
+| Retrieval | Cosine similarity + BM25, fused with reciprocal rank fusion |
 | Chunking | Built-in recursive character splitter (`app/core/splitter.py`) |
 | Frontend | React 18 + Vite 7 |
 | Styling | Tailwind CSS 3.4 + `@tailwindcss/typography` |
 | Markdown | `react-markdown` + `remark-gfm` + `rehype-highlight` |
 | HTTP | Axios (REST) + native `fetch` (SSE streaming) |
 | Containerization | Docker Compose (multi-stage builds, non-root, healthchecks) |
-| CI | GitHub Actions — lint, tests, frontend build, docker build |
-| Security | GitHub CodeQL + advisory dependency audit |
-| Tests | pytest + Vitest |
+| CI | GitHub Actions — lint, tests, coverage, frontend lint/format/test/build, docker smoke test |
+| Security | GitHub CodeQL + advisory dependency audit + Dependabot |
+| Tests | pytest (98) + Vitest (20) |
 
 ---
 
@@ -83,12 +94,23 @@ ChromaDB as vectors, and the collection is created in **cosine space**, so
 
 ```
 .
-├── .env.example
-├── .flake8
+├── .env.example            # every supported variable, documented
+├── .coveragerc             # coverage configuration
+├── .editorconfig
+├── .flake8                 # Black-compatible lint rules
 ├── docker-compose.yml
+├── LICENSE
+├── CHANGELOG.md
+├── CONTRIBUTING.md
+├── SECURITY.md
+├── README.md
+│
 ├── .github/
+│   ├── dependabot.yml      # weekly pip/npm updates, monthly actions
+│   ├── PULL_REQUEST_TEMPLATE.md
+│   ├── ISSUE_TEMPLATE/
 │   └── workflows/
-│       ├── ci.yml          # lint → test → frontend → docker build → audit
+│       ├── ci.yml          # lint → test+cov → frontend → docker smoke → audit
 │       ├── codeql.yml      # Security scanning (Python + JS/TS)
 │       └── release.yml     # Auto-versioned GitHub Releases
 │
@@ -96,32 +118,37 @@ ChromaDB as vectors, and the collection is created in **cosine space**, so
 │   ├── Dockerfile          # multi-stage, non-root, healthcheck
 │   ├── requirements.txt    # runtime dependencies only
 │   ├── requirements-dev.txt
-│   ├── pytest.ini          # asyncio_mode = auto
+│   ├── pytest.ini
 │   ├── app/
-│   │   ├── main.py         # FastAPI entrypoint, lifespan, CORS, health, access control
+│   │   ├── main.py         # entrypoint: lifespan, CORS, health, access control, request ids
 │   │   ├── core/
 │   │   │   ├── config.py   # Pydantic Settings, lru_cache, validation
 │   │   │   ├── splitter.py # recursive character splitter
+│   │   │   ├── bm25.py     # BM25 index + reciprocal rank fusion
 │   │   │   ├── embeddings.py
-│   │   │   ├── retriever.py
+│   │   │   ├── retriever.py  # hybrid retrieval
 │   │   │   ├── rag_chain.py
-│   │   │   └── security.py # optional token auth + rate limiter
+│   │   │   ├── security.py # optional token auth + rate limiter
+│   │   │   └── logging.py  # request-scoped logging
 │   │   ├── api/
 │   │   │   ├── chat.py     # POST /api/chat → SSE StreamingResponse
 │   │   │   └── documents.py # Upload / list / delete
 │   │   └── models/
 │   │       └── schemas.py
-│   └── tests/              # 66 tests
+│   └── tests/              # 98 tests
 │
 └── frontend/
     ├── Dockerfile          # node:22-alpine build → nginx:1.27-alpine
     ├── nginx.conf          # SPA routing, /api proxy, SSE-safe, gzip
+    ├── eslint.config.js
+    ├── .prettierrc.json
     ├── vite.config.js      # dev proxy + manual chunk splitting
     └── src/
         ├── App.jsx
         ├── components/
         │   ├── ChatWindow.jsx
         │   ├── DocumentUpload.jsx
+        │   ├── ErrorBoundary.jsx
         │   ├── Sidebar.jsx
         │   └── SourceCitations.jsx
         ├── hooks/useSSE.js
@@ -197,6 +224,7 @@ needed for local development.
 | `CHUNK_SIZE` | `512` | Max characters per text chunk. |
 | `CHUNK_OVERLAP` | `50` | Overlap between consecutive chunks. |
 | `TOP_K` | `5` | Nearest chunks retrieved per query (1–20). |
+| `HYBRID_SEARCH` | `true` | Fuse BM25 keyword results with vector results. Set to `false` for vector-only retrieval. |
 | `MIN_RELEVANCE_SCORE` | `0` | Drop chunks below this cosine similarity (0 disables). |
 | `MAX_HISTORY_MESSAGES` | `20` | History messages sent to the model (2 = 1 exchange). |
 | `MAX_UPLOAD_BYTES` | `20971520` | Max upload size in bytes (default 20 MB). |
@@ -209,6 +237,11 @@ needed for local development.
 ---
 
 ## API Reference
+
+Every response includes an `X-Request-ID` header — echoed from the request when
+you supply one, generated otherwise. Use it to correlate a failure with the
+server log line for that request. CORS preflight and `/api/health` are exempt
+from authentication.
 
 ### `POST /api/chat`
 
@@ -239,7 +272,8 @@ data: [{"doc_id":"a1b2_report","page":3,"score":0.94}]
 ```
 
 Errors mid-stream are delivered as `event: error` with `{"message": "..."}`,
-so the client can surface them instead of showing a truncated answer.
+so the client can surface them instead of showing a truncated answer. A blank
+question returns **422**.
 
 Every physical line of a payload is a separate `data:` field, which is how
 newlines survive the transport and markdown stays intact.
@@ -268,7 +302,7 @@ Delete a document. Returns **404** if `doc_id` does not exist.
 ### `GET /api/health`
 
 ```json
-{ "status": "ok", "chroma": "connected", "chunks": 42, "version": "1.2.0" }
+{ "status": "ok", "chroma": "connected", "chunks": 42, "version": "1.3.0" }
 ```
 
 Returns **503** with `"status": "degraded"` when ChromaDB cannot be reached.
@@ -278,35 +312,51 @@ Returns **503** with `"status": "degraded"` when ChromaDB cannot be reached.
 ## Running Tests
 
 ```bash
-# Backend — 66 tests
+# Backend — 98 tests, 94% coverage
 cd backend
 pip install -r requirements-dev.txt
 OPENAI_API_KEY=test-key PYTHONPATH=. pytest -q
 
-# Frontend — 17 tests
+# with coverage (what CI enforces, threshold 85%)
+OPENAI_API_KEY=test-key PYTHONPATH=. pytest -q --cov=app --cov-report=term-missing
+
+# Frontend — 20 tests
 cd frontend
 npm ci
 npm test
+npm run lint
+npm run format:check
 ```
+
+All tests run offline: OpenAI and ChromaDB are replaced with fakes, so no API
+key or network access is required.
 
 ---
 
 ## CI / CD Pipeline
 
 **CI** (on every push/PR to `main`, with concurrency cancellation and dependency caching):
+
 ```
 lint           →  black --check + flake8
-test           →  pytest (mocked, no real API calls)
-frontend       →  npm ci + vitest + vite build
-docker-build   →  docker compose build
+test           →  pytest with coverage (fails under 85%)
+frontend       →  eslint + prettier --check + vitest + vite build
+docker-build   →  docker compose build, then boot the stack and smoke test it
 security-audit →  pip-audit + npm audit  (advisory, non-blocking)
 ```
 
+The Docker job does not just build: it starts the compose stack with a dummy
+key, waits for `/api/health`, checks that nginx serves the SPA, checks the `/api`
+proxy, and verifies ChromaDB is writable by the non-root container user.
+
 **CodeQL** — Python + JS/TS, every push + weekly schedule.
+
+**Dependabot** — weekly pip/npm updates (grouped, minor and patch) and monthly
+Actions updates.
 
 **Releases** — Publishes a GitHub Release on every push to `main`. The next version is derived from `__version__` in `config.py` *and* every existing `vX.Y.Z` tag and release:
 
-- If `__version__` is **higher** than anything already released, it is used as-is — bump it to `1.3.0` to cut a minor release.
+- If `__version__` is **higher** than anything already released, it is used as-is — bump it to `1.4.0` to cut a minor release.
 - Otherwise the patch of the highest released version is incremented.
 - An existing tag is never reused, so a run that is replayed or retried simply moves to the next free patch number.
 - If the current commit has already been released, the job exits successfully without publishing anything.
@@ -315,15 +365,56 @@ The changelog is generated from the latest reachable tag and attached via a note
 
 ---
 
+## Limitations
+
+Worth knowing before deploying this for other people:
+
+- **No per-user isolation.** All documents live in one collection and any client
+  can list, query and delete them. `API_TOKEN` is a single shared secret, not
+  accounts. Run one instance per tenant.
+- **The rate limiter is in-process.** With multiple replicas each has its own
+  counter; move limiting to a gateway for horizontal scaling.
+- **Ingestion is synchronous.** The upload request stays open while chunks are
+  embedded; a large PDF can take tens of seconds.
+- **No OCR.** Scanned, image-only PDFs yield no extractable text and return 400.
+- **The BM25 index is built in memory** from the collection on first query and
+  cached until the corpus changes — fine for thousands of chunks, not millions.
+- **Single collection name.** Changing `CHROMA_COLLECTION` starts from an empty
+  corpus (the legacy migration only runs from `documents`).
+- **`chromadb` carries published advisories with no upstream fix.** It is the
+  vector store and cannot be removed; see `SECURITY.md`.
+
+## Roadmap
+
+Ideas that would add the most value next:
+
+- Per-user collections and real accounts.
+- Background ingestion with job status polling.
+- Cross-encoder reranking on top of the fused results.
+- OCR fallback for scanned PDFs.
+- Persistent conversations (history currently lives in browser memory).
+- Evaluation harness with a labelled question set to measure retrieval quality.
+
+---
+
 ## Upgrading from 1.1
 
-Version 1.2 fixes the retrieval pipeline. It uses a new cosine collection
+Version 1.2 fixed the retrieval pipeline. It uses a new cosine collection
 (`CHROMA_COLLECTION=documents_v2`); on first start the backend copies any
 existing chunks from the legacy `documents` collection, preserving the stored
 embeddings so nothing has to be re-embedded. The old collection is left
 untouched and can be deleted once you are satisfied.
 
+Version 1.3 changed the streaming protocol from a `__SOURCES__` text marker to
+typed SSE events. If you wrote your own client against the old format, update it
+to listen for `token`, `sources` and `error`. The bundled frontend already does.
+
 ---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, the checks CI runs, and
+conventions. Security issues: [SECURITY.md](SECURITY.md).
 
 ## License
 
