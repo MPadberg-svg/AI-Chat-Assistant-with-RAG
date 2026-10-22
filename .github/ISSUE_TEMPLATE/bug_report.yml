@@ -1,0 +1,62 @@
+name: Bug report
+description: Something does not behave as documented
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please do not include API keys or document
+        contents. For security issues, see [SECURITY.md](../blob/main/SECURITY.md)
+        instead of opening an issue.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: A clear description of the actual behaviour.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start with `docker compose up --build`
+        2. Upload a PDF
+        3. Ask "..."
+        4. See error
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: From `GET /api/health` (`version` field) or the release tag.
+      placeholder: "1.2.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: How are you running it?
+      options:
+        - Docker Compose
+        - Local (uvicorn + vite dev)
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or request id
+      description: |
+        Include the `X-Request-ID` response header if you have it, plus any
+        server output. Remove secrets first.
+      render: text
+    validations:
+      required: false

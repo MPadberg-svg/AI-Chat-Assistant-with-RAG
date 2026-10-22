@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from time import perf_counter
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,6 +15,13 @@ from app.api.chat import router as chat_router
 from app.api.documents import router as documents_router
 from app.core.config import __version__, get_settings
 from app.core.embeddings import chunk_count
+from app.core.logging import (
+    REQUEST_ID_HEADER,
+    configure_logging,
+    new_request_id,
+    reset_request_id,
+    set_request_id,
+)
 from app.core.security import RateLimiter, extract_bearer_token, tokens_match
 
 logger = logging.getLogger(__name__)
@@ -22,6 +30,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialise state on startup without refusing to boot if Chroma is down."""
+    configure_logging()
     get_settings()
     app.state.chroma_status = "disconnected"
     try:
@@ -61,6 +70,33 @@ async def enforce_access_controls(request: Request, call_next):
                 return JSONResponse({"detail": "Too many requests"}, status_code=429)
 
     return await call_next(request)
+
+
+@app.middleware("http")
+async def add_request_context(request: Request, call_next):
+    """Tag each request with an id and log its outcome."""
+    request_id = request.headers.get(REQUEST_ID_HEADER) or new_request_id()
+    token = set_request_id(request_id)
+    started = perf_counter()
+
+    try:
+        response = await call_next(request)
+    except Exception:  # noqa: BLE001 - re-raised after logging
+        logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+        raise
+    else:
+        duration_ms = (perf_counter() - started) * 1000
+        logger.info(
+            "%s %s -> %d (%.1f ms)",
+            request.method,
+            request.url.path,
+            response.status_code,
+            duration_ms,
+        )
+        response.headers[REQUEST_ID_HEADER] = request_id
+        return response
+    finally:
+        reset_request_id(token)
 
 
 # Added last so it wraps the middleware above and CORS headers are still sent

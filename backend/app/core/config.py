@@ -7,7 +7,7 @@ from functools import lru_cache
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 
 class Settings(BaseSettings):
@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     chunk_overlap: int = Field(50, alias="CHUNK_OVERLAP", ge=0)
     top_k: int = Field(5, alias="TOP_K", ge=1, le=20)
     min_relevance_score: float = Field(0.0, alias="MIN_RELEVANCE_SCORE", ge=0, le=1)
+    hybrid_search: bool = Field(True, alias="HYBRID_SEARCH")
     max_history_messages: int = Field(20, alias="MAX_HISTORY_MESSAGES", ge=0, le=200)
 
     client_url: str = Field("http://localhost:5173", alias="CLIENT_URL")

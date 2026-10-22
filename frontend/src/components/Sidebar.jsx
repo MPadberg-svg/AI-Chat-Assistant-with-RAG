@@ -14,9 +14,7 @@ export default function Sidebar({ documents, onDelete }) {
               className="flex items-center justify-between gap-2 border-b border-slate-800 py-2"
             >
               <span className="min-w-0">
-                <span className="block truncate text-sm text-slate-200">
-                  {document.filename}
-                </span>
+                <span className="block truncate text-sm text-slate-200">{document.filename}</span>
                 <span className="block text-xs text-slate-500">
                   {document.chunks} chunk{document.chunks === 1 ? "" : "s"}
                 </span>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import ChatWindow from "./components/ChatWindow";
 import DocumentUpload from "./components/DocumentUpload";
@@ -26,32 +26,27 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    // Initial fetch on mount: setState happens after the promise resolves.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadDocuments();
   }, [loadDocuments]);
 
-  useEffect(() => {
-    if (!answer) return;
-    setMessages((previous) => {
-      const next = [...previous];
-      if (next[next.length - 1]?.role === "assistant") {
-        next[next.length - 1] = { role: "assistant", content: answer };
-        return next;
-      }
-      return [...next, { role: "assistant", content: answer }];
-    });
-  }, [answer]);
-
   const handleSend = async (question) => {
     setNotice("");
+    const history = conversationHistory;
     setMessages((previous) => [...previous, { role: "user", content: question }]);
-    const finalAnswer = await startStream(question, DEFAULT_TOP_K, conversationHistory);
-    if (finalAnswer !== null) {
-      setConversationHistory((previous) => [
-        ...previous,
-        { role: "user", content: question },
-        { role: "assistant", content: finalAnswer },
-      ]);
-    }
+
+    const finalAnswer = await startStream(question, DEFAULT_TOP_K, history);
+    if (finalAnswer === null) return;
+
+    // The streamed text is rendered live while it arrives (see ChatWindow);
+    // it is committed to the transcript only once the stream finishes.
+    setMessages((previous) => [...previous, { role: "assistant", content: finalAnswer }]);
+    setConversationHistory((previous) => [
+      ...previous,
+      { role: "user", content: question },
+      { role: "assistant", content: finalAnswer },
+    ]);
   };
 
   const handleClear = () => {
@@ -77,11 +72,8 @@ export default function App() {
     setDocuments((previous) => previous.filter((doc) => doc.doc_id !== docId));
   };
 
-  const helperText = useMemo(() => {
-    if (error) return error;
-    if (notice) return notice;
-    return "Upload files, then ask grounded questions based on your documents.";
-  }, [error, notice]);
+  const helperText =
+    error || notice || "Upload files, then ask grounded questions based on your documents.";
 
   return (
     <main className="flex h-screen font-sans">
@@ -106,6 +98,7 @@ export default function App() {
         <ChatWindow
           messages={messages}
           isLoading={isLoading}
+          streamingAnswer={answer}
           sources={sources}
           onSend={handleSend}
         />

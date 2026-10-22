@@ -53,11 +53,13 @@ jobs:
           cache-dependency-path: backend/requirements-dev.txt
       - name: Install dependencies
         run: pip install -r ${{ env.REQUIREMENTS }}
-      - name: Run tests
-        run: PYTHONPATH=backend pytest backend/tests -q
+      - name: Run tests with coverage
+        run: |
+          PYTHONPATH=backend pytest backend/tests -q \
+            --cov=app --cov-report=term-missing --cov-fail-under=85
 
   frontend:
-    name: Frontend build
+    name: Frontend (lint, format, test, build)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -72,6 +74,10 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
+      - name: Lint
+        run: npm run lint
+      - name: Check formatting
+        run: npm run format:check
       - name: Run tests
         run: npm test
       - name: Build production bundle
@@ -116,7 +122,7 @@ jobs:
 
   # Advisory only: reports known advisories in the job log without turning
   # the check red. Drop the `continue-on-error` entries once the remaining
-  # advisory in CODE_REVIEW.md (P1-8) is resolved.
+  # chromadb advisory (no fix published upstream) is resolved.
   security-audit:
     name: Dependency audit (advisory)
     runs-on: ubuntu-latest

@@ -33,9 +33,16 @@ class FakeCollection:
             )
 
     def get(
-        self, where: dict[str, Any] | None = None, limit: int | None = None, **_: Any
+        self,
+        where: dict[str, Any] | None = None,
+        limit: int | None = None,
+        ids: list[str] | None = None,
+        include: list[str] | None = None,
+        **_: Any,
     ):
         matching = self.records
+        if ids is not None:
+            matching = [record for record in matching if record["id"] in ids]
         if where:
             matching = [
                 record
@@ -44,11 +51,16 @@ class FakeCollection:
             ]
         if limit:
             matching = matching[:limit]
-        return {
+        payload = {
             "ids": [record["id"] for record in matching],
             "documents": [record["document"] for record in matching],
             "metadatas": [record["metadata"] for record in matching],
         }
+        if include and "embeddings" in include:
+            payload["embeddings"] = [
+                record.get("embedding") or [0.0] for record in matching
+            ]
+        return payload
 
     def query(self, **kwargs: Any) -> dict[str, Any]:
         self.last_query = kwargs
@@ -89,6 +101,7 @@ def settings_stub() -> SimpleNamespace:
         chunk_overlap=10,
         top_k=5,
         min_relevance_score=0.0,
+        hybrid_search=False,
         max_history_messages=20,
         client_url="http://localhost:5173",
         extra_client_urls="",
@@ -99,3 +112,13 @@ def settings_stub() -> SimpleNamespace:
         auth_enabled=False,
         rate_limit_enabled=False,
     )
+
+
+@pytest.fixture(autouse=True)
+def _reset_retriever_cache():
+    """Keep the module-level BM25 cache from leaking between tests."""
+    from app.core import retriever
+
+    retriever.reset_index_cache()
+    yield
+    retriever.reset_index_cache()

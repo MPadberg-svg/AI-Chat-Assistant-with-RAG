@@ -6,8 +6,7 @@ import remarkGfm from "remark-gfm";
 import SourceCitations from "./SourceCitations";
 
 const INLINE_CODE_CLASS = "rounded bg-gray-100 px-1 font-mono text-sm";
-const BLOCK_CLASS =
-  "block overflow-x-auto rounded-lg bg-gray-900 p-3 text-sm text-green-400";
+const BLOCK_CLASS = "block overflow-x-auto rounded-lg bg-gray-900 p-3 text-sm text-green-400";
 
 // react-markdown v10 no longer passes an `inline` flag to code components.
 // Fenced blocks always carry a className (e.g. "language-js"), inline spans do
@@ -32,20 +31,19 @@ const markdownComponents = {
   },
 };
 
-export default function ChatWindow({ messages, isLoading, sources, onSend }) {
+export default function ChatWindow({ messages, isLoading, streamingAnswer = "", sources, onSend }) {
   const [question, setQuestion] = useState("");
   const containerRef = useRef(null);
-  const lastAssistantMessage = [...messages]
-    .reverse()
-    .find((message) => message.role === "assistant");
-  const showTypingIndicator =
-    isLoading && (!lastAssistantMessage || !lastAssistantMessage.content?.length);
+  // While a response streams it is rendered here, not in `messages`; the
+  // parent commits it to the transcript once the stream completes.
+  const showStreamingBubble = isLoading && Boolean(streamingAnswer);
+  const showTypingIndicator = isLoading && !streamingAnswer;
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
-  }, [messages, isLoading]);
+  }, [messages, isLoading, streamingAnswer]);
 
   const submit = (event) => {
     event.preventDefault();
@@ -87,6 +85,21 @@ export default function ChatWindow({ messages, isLoading, sources, onSend }) {
             )}
           </div>
         ))}
+        {showStreamingBubble && (
+          <div className="flex justify-start">
+            <div className="max-w-prose rounded-2xl rounded-bl-sm bg-gray-100 px-4 py-2 text-gray-800">
+              <div className="prose prose-sm max-w-none">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeHighlight]}
+                  components={markdownComponents}
+                >
+                  {streamingAnswer}
+                </ReactMarkdown>
+              </div>
+            </div>
+          </div>
+        )}
         {showTypingIndicator && (
           <div className="flex justify-start">
             <div className="max-w-prose rounded-2xl rounded-bl-sm bg-gray-100 px-4 py-2 text-gray-800">

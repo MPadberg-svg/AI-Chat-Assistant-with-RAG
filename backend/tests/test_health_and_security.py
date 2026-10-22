@@ -177,3 +177,30 @@ def test_rate_limit_returns_429(monkeypatch) -> None:
     assert client.get("/api/health").status_code == 200  # public, not limited
     assert client.get("/api/documents").status_code == 200
     assert client.get("/api/documents").status_code == 429
+
+
+# ------------------------------------------------------------------------ lifespan
+
+
+def test_lifespan_marks_chroma_connected(monkeypatch) -> None:
+    """Startup stores the live Chroma status on the app state."""
+    from fastapi.testclient import TestClient as _TestClient
+
+    monkeypatch.setattr(main_module, "chunk_count", lambda: 7)
+
+    with _TestClient(app) as lifespan_client:
+        assert lifespan_client.app.state.chroma_status == "connected"
+
+
+def test_lifespan_starts_degraded_when_chroma_is_unavailable(monkeypatch) -> None:
+    """A Chroma outage at boot must not prevent the app from starting."""
+    from fastapi.testclient import TestClient as _TestClient
+
+    def boom():
+        raise RuntimeError("chroma down")
+
+    monkeypatch.setattr(main_module, "chunk_count", boom)
+
+    with _TestClient(app) as lifespan_client:
+        assert lifespan_client.app.state.chroma_status == "disconnected"
+        assert lifespan_client.get("/api/health").status_code == 503

@@ -196,3 +196,85 @@ def test_content_hash_is_stable(tmp_path: Path) -> None:
     path.write_text("hello", encoding="utf-8")
 
     assert embeddings._content_hash(str(path)) == embeddings._content_hash(str(path))
+
+
+# ------------------------------------------------------------------ migration
+
+
+class _ClientWithLegacy:
+    """Chroma client exposing a legacy collection and nothing else."""
+
+    def __init__(self, legacy) -> None:
+        self.legacy = legacy
+        self.requested: list[str] = []
+
+    def get_collection(self, name):
+        self.requested.append(name)
+        if self.legacy is None or name != "documents":
+            raise ValueError(f"Collection {name} does not exist")
+        return self.legacy
+
+
+def _legacy_with_chunks(*_args, **_kwargs):
+    from tests.conftest import FakeCollection
+
+    return FakeCollection(
+        records=[
+            {
+                "id": "old:1:0",
+                "document": "legacy text",
+                "metadata": {"doc_id": "old", "page": 1},
+                "embedding": [0.1, 0.2],
+            }
+        ]
+    )
+
+
+def test_migration_copies_legacy_chunks(monkeypatch, settings_stub, fake_collection):
+    """Pre-1.2 chunks are copied into the cosine collection with embeddings."""
+    legacy = _legacy_with_chunks()
+    monkeypatch.setattr(embeddings, "get_settings", lambda: settings_stub)
+
+    embeddings._migrate_legacy_collection(_ClientWithLegacy(legacy), fake_collection)
+
+    assert fake_collection.last_add["ids"] == ["old:1:0"]
+    assert fake_collection.last_add["documents"] == ["legacy text"]
+    assert fake_collection.last_add["embeddings"] == [[0.1, 0.2]]
+
+
+def test_migration_skips_when_target_has_data(
+    monkeypatch, settings_stub, fake_collection
+):
+    """Re-running the migration must not duplicate chunks."""
+    fake_collection.records.append(
+        {"id": "new:1:0", "document": "x", "metadata": {"doc_id": "new"}}
+    )
+    client = _ClientWithLegacy(_legacy_with_chunks())
+    monkeypatch.setattr(embeddings, "get_settings", lambda: settings_stub)
+
+    embeddings._migrate_legacy_collection(client, fake_collection)
+
+    assert fake_collection.last_add is None
+    assert client.requested == []
+
+
+def test_migration_ignores_missing_legacy_collection(
+    monkeypatch, settings_stub, fake_collection
+):
+    monkeypatch.setattr(embeddings, "get_settings", lambda: settings_stub)
+
+    embeddings._migrate_legacy_collection(_ClientWithLegacy(None), fake_collection)
+
+    assert fake_collection.last_add is None
+
+
+def test_migration_skips_when_collection_names_match(
+    monkeypatch, settings_stub, fake_collection
+):
+    settings_stub.legacy_chroma_collection = settings_stub.chroma_collection
+    client = _ClientWithLegacy(_legacy_with_chunks())
+    monkeypatch.setattr(embeddings, "get_settings", lambda: settings_stub)
+
+    embeddings._migrate_legacy_collection(client, fake_collection)
+
+    assert client.requested == []

@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 _client: chromadb.PersistentClient | None = None
 _collection: Any | None = None
+# Bumped whenever the corpus changes so cached lexical indexes can refresh.
+_corpus_generation = 0
 
 
 @dataclass(frozen=True)
@@ -233,6 +235,7 @@ def ingest_document(
     get_collection().add(
         ids=ids, documents=chunks, metadatas=metadatas, embeddings=embeddings
     )
+    _bump_generation()
     return IngestResult(doc_id=doc_id, chunks=len(chunks))
 
 
@@ -269,8 +272,28 @@ def list_document_ids() -> list[str]:
 def delete_document(doc_id: str) -> None:
     """Delete all chunks belonging to a document."""
     get_collection().delete(where={"doc_id": doc_id})
+    _bump_generation()
+
+
+def _bump_generation() -> None:
+    """Invalidate caches derived from the collection contents."""
+    global _corpus_generation
+    _corpus_generation += 1
 
 
 def chunk_count() -> int:
     """Return the number of stored chunks."""
     return int(get_collection().count())
+
+
+def corpus_generation() -> int:
+    """Return a counter that changes whenever chunks are added or removed."""
+    return _corpus_generation
+
+
+def all_chunk_texts() -> dict[str, str]:
+    """Return ``chunk_id -> text`` for the whole collection."""
+    payload = get_collection().get(include=["documents"])
+    ids = payload.get("ids") or []
+    documents = payload.get("documents") or []
+    return {chunk_id: text for chunk_id, text in zip(ids, documents) if text}
