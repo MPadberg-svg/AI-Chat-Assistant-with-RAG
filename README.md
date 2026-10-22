@@ -4,7 +4,7 @@ A production-ready **Retrieval-Augmented Generation** chat assistant. Upload you
 
 ![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.159-009688?logo=fastapi)
-![React](https://img.shields.io/badge/React-18-61DAFB?logo=react)
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)
 ![ChromaDB](https://img.shields.io/badge/ChromaDB-1.5-orange?logo=chromadb)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4-38BDF8?logo=tailwindcss)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker)
@@ -79,14 +79,14 @@ it was retrieved by the keyword side.
 | LLM | OpenAI `gpt-4o-mini` |
 | Retrieval | Cosine similarity + BM25, fused with reciprocal rank fusion |
 | Chunking | Built-in recursive character splitter (`app/core/splitter.py`) |
-| Frontend | React 18 + Vite 7 |
+| Frontend | React 19 + Vite 8 |
 | Styling | Tailwind CSS 3.4 + `@tailwindcss/typography` |
 | Markdown | `react-markdown` + `remark-gfm` + `rehype-highlight` |
 | HTTP | Axios (REST) + native `fetch` (SSE streaming) |
 | Containerization | Docker Compose (multi-stage builds, non-root, healthchecks) |
 | CI | GitHub Actions — lint, tests, coverage, frontend lint/format/test/build, docker smoke test |
 | Security | GitHub CodeQL + advisory dependency audit + Dependabot |
-| Tests | pytest (108) + Vitest (20) |
+| Tests | pytest (108) + Vitest (23) |
 
 ---
 
@@ -320,7 +320,7 @@ OPENAI_API_KEY=test-key PYTHONPATH=. pytest -q
 # with coverage (what CI enforces, threshold 85%)
 OPENAI_API_KEY=test-key PYTHONPATH=. pytest -q --cov=app --cov-report=term-missing
 
-# Frontend — 20 tests
+# Frontend — 23 tests
 cd frontend
 npm ci
 npm test
