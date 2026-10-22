@@ -84,7 +84,7 @@ ChromaDB vector store        System prompt + history + context
 ├── docker-compose.yml
 ├── .github/
 │   └── workflows/
-│       ├── ci.yml          # lint → test → docker build (concurrency cancellation)
+│       ├── ci.yml          # lint → test → frontend → docker build (concurrency + caching)
 │       ├── codeql.yml      # Security scanning (Python + JS/TS)
 │       └── release.yml     # Auto-versioned GitHub Releases
 │
@@ -241,16 +241,25 @@ OPENAI_API_KEY=test-key PYTHONPATH=. pytest -q
 
 ## CI / CD Pipeline
 
-**CI** (on every push/PR to `main`, with concurrency cancellation):
+**CI** (on every push/PR to `main`, with concurrency cancellation and dependency caching):
 ```
-lint          →  black --check + flake8
-test          →  pytest (monkeypatched, no real API calls)
-docker-build  →  docker compose build
+lint           →  black --check + flake8
+test           →  pytest (monkeypatched, no real API calls)
+frontend       →  npm ci + vite build
+docker-build   →  docker compose build
+security-audit →  pip-audit + npm audit  (advisory, non-blocking)
 ```
 
 **CodeQL** — Python + JS/TS, every push + weekly schedule.
 
-**Releases** — Reads `__version__` from `config.py`, auto-increments patch, tags and publishes a GitHub Release with commit-based changelog. To bump minor/major, update `__version__` manually before pushing.
+**Releases** — Publishes a GitHub Release on every push to `main`. The next version is derived from `__version__` in `config.py` *and* every existing `vX.Y.Z` tag and release:
+
+- If `__version__` is **higher** than anything already released, it is used as-is — bump it to `1.2.0` to cut a minor release.
+- Otherwise the patch of the highest released version is incremented.
+- An existing tag is never reused, so a run that is replayed or retried simply moves to the next free patch number.
+- If the current commit has already been released, the job exits successfully without publishing anything.
+
+The changelog is generated from the latest reachable tag and attached via a notes file. Releases can also be triggered by hand from **Actions → Release → Run workflow** (`workflow_dispatch`).
 
 ---
 
