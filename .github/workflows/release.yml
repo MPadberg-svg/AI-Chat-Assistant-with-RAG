@@ -6,69 +6,175 @@ on:
     paths-ignore:
       - "**.md"
       - ".github/workflows/codeql.yml"
+  # Allows re-running the release manually from the Actions tab.
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
   group: release-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Never cancel a release halfway through: the tag may already be pushed.
+  cancel-in-progress: false
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Read current version
-        id: current_version
+          fetch-tags: true
+
+      - name: Check whether HEAD is already released
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
+          skip=false
+          # Tags pointing at HEAD, newest version first.
+          while read -r tag; do
+            [ -n "$tag" ] || continue
+            if gh release view "$tag" >/dev/null 2>&1; then
+              echo "HEAD ($(git rev-parse --short HEAD)) is already released as $tag."
+              skip=true
+              break
+            fi
+          done <<< "$(git tag --points-at HEAD -l 'v[0-9]*' --sort=-v:refname)"
+          echo "skip=$skip" >> "$GITHUB_OUTPUT"
+
+      - name: Determine next version
+        id: version
+        if: steps.check.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
           version=$(python - <<'PY'
+          """Compute the next release version.
+
+          Rules:
+            * `__version__` in config.py is the declared version.
+            * Every existing vX.Y.Z tag and published release is taken into account.
+            * If the declared version is newer than anything released, it is used as-is
+              (this is how a minor/major bump is requested).
+            * Otherwise the patch of the highest known version is incremented.
+            * The result is advanced until it does not collide with an existing tag.
+          """
+          import json
           import re
+          import subprocess
           from pathlib import Path
 
-          content = Path("backend/app/core/config.py").read_text(encoding="utf-8")
-          match = re.search(r'^__version__\s*=\s*"(\d+\.\d+\.\d+)"', content, re.MULTILINE)
+          CONFIG = Path("backend/app/core/config.py")
+          SEMVER = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
+
+
+          def parse(value: str):
+              match = SEMVER.match(value.strip())
+              return tuple(int(part) for part in match.groups()) if match else None
+
+
+          def run(*args: str) -> str:
+              try:
+                  return subprocess.run(
+                      args, check=True, capture_output=True, text=True
+                  ).stdout
+              except (subprocess.CalledProcessError, FileNotFoundError):
+                  return ""
+
+
+          content = CONFIG.read_text(encoding="utf-8")
+          match = re.search(r'^__version__\s*=\s*"([^"]+)"', content, re.MULTILINE)
           if not match:
-              raise SystemExit("__version__ not found")
-          print(match.group(1))
+              raise SystemExit("__version__ not found in backend/app/core/config.py")
+          declared = parse(match.group(1))
+          if declared is None:
+              raise SystemExit(f"__version__ is not a valid semver: {match.group(1)!r}")
+
+          known = set()
+          for tag in run("git", "tag", "-l").split():
+              parsed = parse(tag)
+              if parsed:
+                  known.add(parsed)
+
+          # Tags are authoritative, but include releases too in case a tag was deleted.
+          for release in json.loads(
+              run("gh", "release", "list", "--limit", "100", "--json", "tagName") or "[]"
+          ):
+              parsed = parse(release.get("tagName", ""))
+              if parsed:
+                  known.add(parsed)
+
+          highest = max(known) if known else (0, 0, 0)
+          if declared > highest:
+              candidate = declared
+          else:
+              candidate = (highest[0], highest[1], highest[2] + 1)
+
+          while candidate in known:
+              candidate = (candidate[0], candidate[1], candidate[2] + 1)
+
+          print("{}.{}.{}".format(*candidate))
           PY
           )
           echo "version=$version" >> "$GITHUB_OUTPUT"
-      - name: Get latest tag
-        id: latest_tag
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "Next release: v$version"
+
+      - name: Generate release notes
+        id: notes
+        if: steps.check.outputs.skip != 'true'
         run: |
-          latest=$(git describe --tags --abbrev=0 2>/dev/null || echo "none")
-          echo "tag=$latest" >> "$GITHUB_OUTPUT"
-      - name: Generate changelog
-        id: changelog
-        run: |
-          if [ "${{ steps.latest_tag.outputs.tag }}" = "none" ]; then
-            log=$(git log -n 30 --pretty=format:"- %s (%an)")
-          else
-            log=$(git log "${{ steps.latest_tag.outputs.tag }}..HEAD" -n 30 --pretty=format:"- %s (%an)")
+          set -euo pipefail
+          # Prefer the newest tag reachable from HEAD; fall back to the newest tag
+          # overall (history may have been rewritten), then to a plain recent log.
+          base=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)
+          if [ -z "$base" ]; then
+            base=$(git tag -l 'v[0-9]*' --sort=-v:refname | head -n 1 || true)
           fi
-          echo "changelog<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$log" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
-      - name: Compute new version
-        id: new_version
+
+          if [ -n "$base" ]; then
+            header="## Changes since ${base}"
+            range="${base}..HEAD"
+          else
+            header="## Recent changes"
+            range="HEAD"
+          fi
+
+          count=$(git rev-list --count "$range")
+          {
+            echo "$header"
+            echo
+            if [ "$count" -gt 0 ]; then
+              git log "$range" -n 30 --pretty=format:"- %s (%an)"
+              echo
+            else
+              echo "_No commit changes since the previous release._"
+            fi
+          } > release-notes.md
+
+          echo "----- release notes -----"
+          cat release-notes.md
+
+      - name: Create and push tag
+        if: steps.check.outputs.skip != 'true'
         run: |
-          IFS='.' read -r major minor patch <<< "${{ steps.current_version.outputs.version }}"
-          patch=$((patch + 1))
-          echo "version=${major}.${minor}.${patch}" >> "$GITHUB_OUTPUT"
-      - name: Create tag
-        run: |
+          set -euo pipefail
+          tag="${{ steps.version.outputs.tag }}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "v${{ steps.new_version.outputs.version }}" -m "Release v${{ steps.new_version.outputs.version }}"
-      - name: Push tag
-        run: git push origin "v${{ steps.new_version.outputs.version }}"
+          git tag -a "$tag" -m "Release $tag"
+          git push origin "refs/tags/$tag"
+
       - name: Create GitHub Release
+        if: steps.check.outputs.skip != 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: "v${{ steps.new_version.outputs.version }}"
-          name: "v${{ steps.new_version.outputs.version }}"
-          body: ${{ steps.changelog.outputs.changelog }}
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.tag }}
+          body_path: release-notes.md
+          make_latest: true

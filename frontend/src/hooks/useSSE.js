@@ -1,58 +1,75 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import { sendMessage } from "../services/api";
+import { SSE_EVENT, createSseParser } from "../lib/sse";
+import { readErrorMessage, sendMessage } from "../services/api";
 
-const MARKER = "__SOURCES__";
+const DEFAULT_TOP_K = 5;
+
+const toMessage = (value, fallback) => {
+  if (typeof value === "string" && value.trim()) return value;
+  return fallback;
+};
 
 export const useSSE = () => {
   const [answer, setAnswer] = useState("");
   const [sources, setSources] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const controllerRef = useRef(null);
 
   const reset = useCallback(() => {
+    controllerRef.current?.abort();
     setAnswer("");
     setSources([]);
     setError("");
+    setIsLoading(false);
   }, []);
 
-  const startStream = useCallback(async (question, topK = 5, history = []) => {
+  // Abort an in-flight stream when the component unmounts.
+  useEffect(() => () => controllerRef.current?.abort(), []);
+
+  const startStream = useCallback(async (question, topK = DEFAULT_TOP_K, history = []) => {
+    controllerRef.current?.abort();
+    const controller = new AbortController();
+    controllerRef.current = controller;
+
     setIsLoading(true);
     setError("");
     setAnswer("");
     setSources([]);
 
-    try {
-      let sseBuffer = "";
-      let sourceBuffer = "";
-      let inSources = false;
-      let finalAnswer = "";
+    let finalAnswer = "";
+    let receivedSources = [];
+    let streamError = null;
 
-      const appendAnswer = (chunk) => {
-        if (!chunk) return;
-        finalAnswer += chunk;
-        setAnswer((prev) => prev + chunk);
-      };
-
-      const processPayload = (payload) => {
-        if (!inSources) {
-          const markerIndex = payload.indexOf(MARKER);
-          if (markerIndex >= 0) {
-            const answerChunk = payload.slice(0, markerIndex);
-            appendAnswer(answerChunk);
-            inSources = true;
-            sourceBuffer += payload.slice(markerIndex + MARKER.length);
-          } else {
-            appendAnswer(payload);
-          }
-        } else {
-          sourceBuffer += payload;
+    const parser = createSseParser(({ event, data }) => {
+      if (event === SSE_EVENT.TOKEN) {
+        finalAnswer += data;
+        setAnswer((previous) => previous + data);
+        return;
+      }
+      if (event === SSE_EVENT.SOURCES) {
+        try {
+          const parsed = JSON.parse(data);
+          if (Array.isArray(parsed)) receivedSources = parsed;
+        } catch {
+          streamError = streamError || "Could not read the source citations.";
         }
-      };
+        return;
+      }
+      if (event === SSE_EVENT.ERROR) {
+        try {
+          streamError = toMessage(JSON.parse(data)?.message, data);
+        } catch {
+          streamError = toMessage(data, "The answer stream failed.");
+        }
+      }
+    });
 
-      const response = await sendMessage(question, topK, history);
+    try {
+      const response = await sendMessage(question, topK, history, controller.signal);
       if (!response.ok || !response.body) {
-        throw new Error("Failed to connect to chat stream.");
+        throw new Error(await readErrorMessage(response));
       }
 
       const reader = response.body.getReader();
@@ -61,38 +78,37 @@ export const useSSE = () => {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        sseBuffer += decoder.decode(value, { stream: true });
+        parser.push(decoder.decode(value, { stream: true }));
+      }
+      parser.push(decoder.decode());
+      parser.flush();
 
-        let boundary = sseBuffer.indexOf("\n\n");
-        while (boundary !== -1) {
-          const frame = sseBuffer.slice(0, boundary);
-          sseBuffer = sseBuffer.slice(boundary + 2);
-
-          const payload = frame
-            .split("\n")
-            .filter((line) => line.startsWith("data:"))
-            .map((line) => line.replace(/^data:\s?/, ""))
-            .join("\n");
-
-          if (payload) {
-            processPayload(payload);
-          }
-
-          boundary = sseBuffer.indexOf("\n\n");
-        }
+      if (streamError) {
+        setError(streamError);
+        return null;
       }
 
-      if (sourceBuffer.trim()) {
-        setSources(JSON.parse(sourceBuffer));
-      }
+      setSources(receivedSources);
       return finalAnswer;
-    } catch (streamError) {
-      setError(streamError instanceof Error ? streamError.message : "Streaming failed.");
+    } catch (streamFailure) {
+      if (streamFailure?.name === "AbortError") return null;
+      setError(
+        streamFailure instanceof Error
+          ? streamFailure.message
+          : "Streaming failed. Please try again."
+      );
       return null;
     } finally {
       setIsLoading(false);
+      if (controllerRef.current === controller) controllerRef.current = null;
     }
   }, []);
 
-  return { answer, sources, isLoading, error, reset, startStream };
+  const cancel = useCallback(() => {
+    controllerRef.current?.abort();
+    controllerRef.current = null;
+    setIsLoading(false);
+  }, []);
+
+  return { answer, sources, isLoading, error, reset, startStream, cancel };
 };

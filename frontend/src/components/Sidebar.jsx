@@ -8,16 +8,24 @@ export default function Sidebar({ documents, onDelete }) {
         <p className="text-sm text-slate-400">No documents uploaded yet.</p>
       ) : (
         <ul className="m-0 list-none p-0">
-          {documents.map((docId) => (
+          {documents.map((document) => (
             <li
-              key={docId}
+              key={document.doc_id}
               className="flex items-center justify-between gap-2 border-b border-slate-800 py-2"
             >
-              <span className="truncate text-sm text-slate-200">{docId}</span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm text-slate-200">
+                  {document.filename}
+                </span>
+                <span className="block text-xs text-slate-500">
+                  {document.chunks} chunk{document.chunks === 1 ? "" : "s"}
+                </span>
+              </span>
               <button
-                onClick={() => onDelete(docId)}
-                aria-label={`Delete ${docId}`}
-                className="text-xs text-slate-500 transition-colors hover:text-red-400"
+                type="button"
+                onClick={() => onDelete(document.doc_id)}
+                aria-label={`Delete ${document.filename}`}
+                className="shrink-0 text-xs text-slate-500 transition-colors hover:text-red-400"
               >
                 Delete
               </button>

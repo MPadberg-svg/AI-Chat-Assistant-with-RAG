@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -13,38 +14,134 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "22"
+  REQUIREMENTS: backend/requirements-dev.txt
+
 jobs:
   lint:
+    name: Lint (black + flake8)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
       - name: Install dependencies
-        run: pip install -r backend/requirements.txt
+        run: pip install -r ${{ env.REQUIREMENTS }}
       - name: Run formatting checks
         run: black --check backend/app backend/tests
       - name: Run lint checks
         run: flake8 backend/app backend/tests
 
   test:
+    name: Backend tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       OPENAI_API_KEY: test-key
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
       - name: Install dependencies
-        run: pip install -r backend/requirements.txt
+        run: pip install -r ${{ env.REQUIREMENTS }}
       - name: Run tests
         run: PYTHONPATH=backend pytest backend/tests -q
 
-  docker-build:
+  frontend:
+    name: Frontend build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Run tests
+        run: npm test
+      - name: Build production bundle
+        run: npm run build
+
+  docker-build:
+    name: Docker build & smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Build docker compose stack
         run: docker compose build
+      - name: Create dummy environment
+        run: |
+          cp .env.example .env
+          sed -i 's/^OPENAI_API_KEY=.*/OPENAI_API_KEY=test-key/' .env
+      - name: Start the stack
+        run: docker compose up -d
+      - name: Wait for the backend to become healthy
+        run: |
+          for attempt in $(seq 1 45); do
+            if curl -fsS http://localhost:8000/api/health; then
+              echo
+              echo "backend healthy after ${attempt} attempt(s)"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "backend did not become healthy"
+          docker compose logs --no-color backend
+          exit 1
+      - name: Check the frontend is served
+        run: curl -fsS http://localhost:5173/ | grep -q "<div id=\"root\">"
+      - name: Check the API proxy works through nginx
+        run: curl -fsS http://localhost:5173/api/health
+      - name: Check ChromaDB can write as the non-root user
+        run: docker compose exec -T backend python -c "from app.core.embeddings import chunk_count; print('chunks:', chunk_count())"
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
+
+  # Advisory only: reports known advisories in the job log without turning
+  # the check red. Drop the `continue-on-error` entries once the remaining
+  # advisory in CODE_REVIEW.md (P1-8) is resolved.
+  security-audit:
+    name: Dependency audit (advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Audit Python dependencies
+        continue-on-error: true
+        run: |
+          pip install --quiet pip-audit
+          pip-audit -r backend/requirements.txt --progress-spinner off
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+      - name: Audit frontend dependencies
+        continue-on-error: true
+        working-directory: frontend
+        run: npm audit --omit=dev
