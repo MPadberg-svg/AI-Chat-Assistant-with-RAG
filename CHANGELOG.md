@@ -7,6 +7,31 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 GitHub Releases are generated automatically from commit messages; this file
 records the notable, user-facing changes.
 
+## [1.3.1] - 2026-10-22
+
+### Changed
+
+- **OpenAI SDK upgraded from 1.102.0 to 3.35.1.** The application surface is
+  unchanged (`client.embeddings.create`, `client.chat.completions.create` with
+  `stream=True`, `response.data[].index/.embedding`,
+  `chunk.choices[0].delta.content`), verified against the real SDK rather than
+  assumed.
+- The `AsyncOpenAI` client is now created once per process instead of once per
+  chat request. The previous behaviour leaked an `httpx` connection pool on
+  every message.
+- Provider failures are classified with the SDK's error hierarchy
+  (`RateLimitError`, `APIConnectionError`, `APIError`) and reported with
+  specific messages instead of a generic one, and expected API errors are
+  logged without a stack trace.
+
+### Added
+
+- `backend/tests/test_openai_contract.py`: contract tests that drive the **real**
+  SDK with a mocked HTTP transport, covering request serialisation, response
+  parsing, batching, streaming and error mapping. The existing tests replace the
+  client classes, so they would have passed on any SDK version; these fail if
+  the surface the application relies on changes.
+
 ## [1.3.0] - 2026-10-22
 
 ### Added
