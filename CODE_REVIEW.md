@@ -4,6 +4,11 @@
 **Scope:** backend (FastAPI/Chroma/OpenAI), frontend (React/Vite), Docker, CI/CD, dependencies
 **Method:** every file read; CI pipeline executed locally (black, flake8, pytest, `vite build`, `npm ci`); the suspected runtime defects were reproduced with executable probes against the real library versions.
 
+> **Status: resolved in `v1.2.0`.** All five P0 findings, all nine P1 findings and
+> every P2/P3 item are addressed on this branch. This document is kept as the
+> audit record; §11 maps each finding to the change that fixed it and to the
+> test that now guards it.
+
 ---
 
 ## 1. Executive summary
@@ -354,3 +359,55 @@ grep -c ARG frontend/Dockerfile          # -> 0
 pip-audit -r backend/requirements.txt | head -5
 cd frontend && npm audit --omit=dev | tail -5
 ```
+
+---
+
+## 11. Resolution log
+
+Verified on this branch with `pytest` (66 passed), `vitest` (17 passed),
+`black --check`, `flake8`, `npm run build`, and two live ChromaDB integration
+probes (fresh ingest + legacy migration).
+
+| Finding | Fix | Guarded by |
+|---|---|---|
+| P0-1 wrong embedding function | `retriever.py` embeds the query with the OpenAI model and calls `query(query_embeddings=...)`; the OpenAI client is cached | `test_retriever.py::test_query_uses_embeddings_not_raw_text` |
+| P0-2 negative scores | Collection created with `hnsw:space=cosine`; scores clamped to 0..1; UI clamps too | `test_retriever.py::test_scores_are_clamped_to_the_unit_interval`, `ChatWindow.test.jsx` |
+| P0-2 migration | Legacy `documents` collection copied into `documents_v2` on first start, embeddings preserved | live migration probe; `embeddings._migrate_legacy_collection` |
+| P0-3 dropped newlines | SSE frames emit one `data:` line per payload line; new dependency-free parser rejoins them | `test_chat_api.py::test_newlines_survive_the_sse_framing`, `sse.test.js` |
+| P0-4 nested `<pre>` | `pre`/`code` components split correctly for react-markdown v10 | `ChatWindow.test.jsx` (3 tests) |
+| P0-5 dead `VITE_API_URL` | `ARG`/`ENV` in the Dockerfile, build arg in compose, relative `/api` default, nginx proxy | clean-room `npm run build`; compose config |
+| P1-1 silent stream errors | Typed `token` / `sources` / `error` events end-to-end | `test_rag_chain.py` (2 error tests), `test_chat_api.py` |
+| P1-2 blocking I/O | ChromaDB and embedding calls moved to `run_in_threadpool` | covered by route tests |
+| P1-3 buffered uploads | 1 MB streaming loop that aborts at the limit | `test_documents_api.py::test_upload_oversized_file_returns_413` |
+| P1-4 unbatched embeddings | `embed_texts()` batches at `EMBEDDING_BATCH_SIZE` | `test_embeddings.py::test_embed_texts_batches_requests` |
+| P1-5 unwritable volume | Multi-stage image creates and chowns `/app/chroma_db` before dropping to `appuser` | build inspection |
+| P1-6 no `.dockerignore` | Added for both contexts | build context drops 77 MB to 222 KB |
+| P1-7 no auth / limits | Optional `API_TOKEN` bearer auth + `RATE_LIMIT_PER_MINUTE`, both off by default | `test_health_and_security.py` (11 tests) |
+| P1-8 132 Python CVEs | LangChain removed; pypdf, python-multipart, FastAPI, ChromaDB upgraded — **132 → 5** | `pip-audit` |
+| P1-8 npm advisories | axios 1.20, build-only deps moved to devDependencies — **prod 12 high → 0** | `npm audit --omit=dev` |
+| P1-9 dishonest health | Live check, `503` + `degraded` when Chroma is down, O(1) count | `test_health_and_security.py` (2 tests) |
+| P2-1 history mismatch | `MAX_HISTORY_MESSAGES` defaults to 20 (10 exchanges) | `test_rag_chain.py::test_history_is_trimmed` |
+| P2-2 dev deps in image | Split into `requirements-dev.txt` | CI installs the dev file |
+| P2-3 dead `TOP_K` | `top_k` defaults to `settings.top_k` | `test_retriever.py` |
+| P2-4 dead code | Removed `os.makedirs` tail | lint |
+| P2-5 unused schemas | `ChatResponse` removed; `SourceInfo` now used for the payload | lint |
+| P2-6 hardcoded `/tmp` | `tempfile` default directory | `test_documents_api.py` |
+| P2-7 duplicate uploads | SHA-256 dedupe; file input reset after upload | `test_embeddings.py`, `test_documents_api.py` |
+| P2-8 DOCX tables / empty files | Table rows extracted; empty documents return **400** | `test_embeddings.py`, `test_documents_api.py` |
+| P2-9 blank questions | Validator rejects whitespace-only input | `test_chat_api.py` |
+| P2-10 no relevance floor | `MIN_RELEVANCE_SCORE` filtering | `test_retriever.py` |
+| P2-11 prompt injection | Context labelled as data; system prompt states it is never instructions | `test_rag_chain.py` |
+| P2-12 compose hardening | `restart`, healthchecks, `start_period` | config review |
+| P2-13 crash on startup | Degraded start; health reports the truth | `test_health_and_security.py` |
+| P2-14 missing LICENSE | MIT LICENSE added | — |
+| P3 all | History semantics documented, versions unified at 1.2.0, `.env.example` consolidated, README rewritten, parser flushes trailing frames | `sse.test.js` |
+
+### Remaining known advisories
+
+- `chromadb 1.5.9` — 4 advisories with **no published fix version** (PYSEC-2026-311, -3813, -3814, -3815). ChromaDB is the core vector store, so this cannot be removed; revisit when upstream releases a patched build.
+- Frontend dev-only: `braces` and `postcss-selector-parser` inside the Tailwind/PostCSS toolchain. They never ship in the bundle; resolving them requires Tailwind 4, which is a config-format migration rather than a patch.
+
+### Still open by choice
+
+- **ESLint/Prettier** — no frontend linter yet; Vitest covers behaviour but not style.
+- **`dependabot.yml`** — generates ongoing PRs, so it is left as a decision for the maintainer.

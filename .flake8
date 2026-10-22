@@ -1,2 +1,5 @@
 [flake8]
 max-line-length = 88
+# E203 conflicts with Black's slice formatting.
+extend-ignore = E203
+exclude = .git,__pycache__,chroma_db

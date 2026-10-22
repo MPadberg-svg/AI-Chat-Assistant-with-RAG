@@ -1,8 +1,17 @@
-import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   plugins: [react()],
+  server: {
+    // Lets `npm run dev` talk to the backend without any env configuration.
+    proxy: {
+      "/api": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
+    },
+  },
   build: {
     rollupOptions: {
       output: {
@@ -12,5 +21,9 @@ export default defineConfig({
         },
       },
     },
+  },
+  test: {
+    environment: "node",
+    include: ["src/**/*.test.{js,jsx}"],
   },
 });

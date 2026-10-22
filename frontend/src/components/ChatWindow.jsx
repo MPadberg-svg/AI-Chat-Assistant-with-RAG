@@ -5,47 +5,69 @@ import remarkGfm from "remark-gfm";
 
 import SourceCitations from "./SourceCitations";
 
+const INLINE_CODE_CLASS = "rounded bg-gray-100 px-1 font-mono text-sm";
+const BLOCK_CLASS =
+  "block overflow-x-auto rounded-lg bg-gray-900 p-3 text-sm text-green-400";
+
+// react-markdown v10 no longer passes an `inline` flag to code components.
+// Fenced blocks always carry a className (e.g. "language-js"), inline spans do
+// not, so block styling is applied on `pre` and inline styling on `code`.
+const markdownComponents = {
+  pre({ children }) {
+    return <pre className={BLOCK_CLASS}>{children}</pre>;
+  },
+  code({ className, children, ...props }) {
+    return (
+      <code className={className || INLINE_CODE_CLASS} {...props}>
+        {children}
+      </code>
+    );
+  },
+  a({ children, ...props }) {
+    return (
+      <a target="_blank" rel="noopener noreferrer" {...props}>
+        {children}
+      </a>
+    );
+  },
+};
+
 export default function ChatWindow({ messages, isLoading, sources, onSend }) {
   const [question, setQuestion] = useState("");
   const containerRef = useRef(null);
-  const lastAssistantMessage = [...messages].reverse().find((message) => message.role === "assistant");
-  const showTypingIndicator = isLoading && (!lastAssistantMessage || !lastAssistantMessage.content?.length);
-
-  const markdownComponents = {
-    code({ inline, className, children, ...props }) {
-      if (inline) {
-        return (
-          <code className="rounded bg-gray-100 px-1 font-mono text-sm" {...props}>
-            {children}
-          </code>
-        );
-      }
-      return (
-        <pre className="block overflow-x-auto rounded-lg bg-gray-900 p-3 text-sm text-green-400">
-          <code className={className} {...props}>
-            {children}
-          </code>
-        </pre>
-      );
-    },
-  };
+  const lastAssistantMessage = [...messages]
+    .reverse()
+    .find((message) => message.role === "assistant");
+  const showTypingIndicator =
+    isLoading && (!lastAssistantMessage || !lastAssistantMessage.content?.length);
 
   useEffect(() => {
-    containerRef.current?.scrollTo({ top: containerRef.current.scrollHeight, behavior: "smooth" });
+    const container = containerRef.current;
+    if (!container) return;
+    container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
   }, [messages, isLoading]);
 
   const submit = (event) => {
     event.preventDefault();
-    if (!question.trim()) return;
-    onSend(question);
+    const trimmed = question.trim();
+    if (!trimmed || isLoading) return;
+    onSend(trimmed);
     setQuestion("");
   };
 
   return (
     <section className="flex flex-1 flex-col">
-      <div ref={containerRef} className="flex-1 space-y-3 overflow-y-auto rounded-xl border bg-white p-4">
+      <div
+        ref={containerRef}
+        role="log"
+        aria-live="polite"
+        className="flex-1 space-y-3 overflow-y-auto rounded-xl border bg-white p-4"
+      >
         {messages.map((message, index) => (
-          <div key={index} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
+          <div
+            key={index}
+            className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
+          >
             {message.role === "user" ? (
               <span className="ml-auto max-w-xs rounded-2xl rounded-br-sm bg-blue-600 px-4 py-2 text-white">
                 {message.content}
@@ -83,14 +105,15 @@ export default function ChatWindow({ messages, isLoading, sources, onSend }) {
           value={question}
           onChange={(event) => setQuestion(event.target.value)}
           placeholder="Ask a question about your uploaded documents"
+          aria-label="Your question"
           className="flex-1 rounded-xl border px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
         <button
           type="submit"
-          disabled={isLoading}
+          disabled={isLoading || !question.trim()}
           className="rounded-xl bg-blue-600 px-5 py-2 text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
         >
-          Send
+          {isLoading ? "Sending…" : "Send"}
         </button>
       </form>
     </section>

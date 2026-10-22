@@ -17,6 +17,7 @@ concurrency:
 env:
   PYTHON_VERSION: "3.11"
   NODE_VERSION: "22"
+  REQUIREMENTS: backend/requirements-dev.txt
 
 jobs:
   lint:
@@ -29,9 +30,9 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: backend/requirements.txt
+          cache-dependency-path: backend/requirements-dev.txt
       - name: Install dependencies
-        run: pip install -r backend/requirements.txt
+        run: pip install -r ${{ env.REQUIREMENTS }}
       - name: Run formatting checks
         run: black --check backend/app backend/tests
       - name: Run lint checks
@@ -49,9 +50,9 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: backend/requirements.txt
+          cache-dependency-path: backend/requirements-dev.txt
       - name: Install dependencies
-        run: pip install -r backend/requirements.txt
+        run: pip install -r ${{ env.REQUIREMENTS }}
       - name: Run tests
         run: PYTHONPATH=backend pytest backend/tests -q
 
@@ -71,6 +72,8 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
+      - name: Run tests
+        run: npm test
       - name: Build production bundle
         run: npm run build
 
@@ -84,8 +87,8 @@ jobs:
         run: docker compose build
 
   # Advisory only: reports known advisories in the job log without turning
-  # the check red. Drop the `continue-on-error` entries once the dependency
-  # upgrades in CODE_REVIEW.md (P1-8) have landed, then the job gates again.
+  # the check red. Drop the `continue-on-error` entries once the remaining
+  # advisory in CODE_REVIEW.md (P1-8) is resolved.
   security-audit:
     name: Dependency audit (advisory)
     runs-on: ubuntu-latest

@@ -1,0 +1,12 @@
+-r requirements.txt
+
+# Test tooling (not installed in the production image)
+httpx==0.28.1
+pytest==9.1.1
+pytest-asyncio==1.4.0
+pytest-cov==7.1.0
+pip-audit==2.10.1
+
+# Linting
+black==26.10.1
+flake8==7.4.1
