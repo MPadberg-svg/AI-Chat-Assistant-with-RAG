@@ -7,6 +7,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 GitHub Releases are generated automatically from commit messages; this file
 records the notable, user-facing changes.
 
+## [1.3.3] - 2026-10-22
+
+### Changed
+
+- **OpenAI SDK 3.35.1 -> 3.36.1.** The 3.36.0/3.36.1 releases touch the
+  Realtime/WebSocket and Vertex code paths and add API features; the surface
+  this application uses (`embeddings.create`, `chat.completions.create` with
+  `stream=True`) is unchanged. The real-SDK contract tests pass unmodified.
+- **CI runners pinned to `ubuntu-24.04`** instead of `ubuntu-latest`. GitHub
+  started migrating the `ubuntu-latest` label to Ubuntu 26 on 2026-10-19; the
+  pin keeps the image from changing underneath the build until the move is
+  deliberate.
+
 ## [1.3.2] - 2026-10-22
 
 ### Changed

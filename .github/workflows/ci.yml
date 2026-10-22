@@ -22,7 +22,7 @@ env:
 jobs:
   lint:
     name: Lint (black + flake8)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -40,7 +40,7 @@ jobs:
 
   test:
     name: Backend tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       OPENAI_API_KEY: test-key
@@ -60,7 +60,7 @@ jobs:
 
   frontend:
     name: Frontend (lint, format, test, build)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     defaults:
       run:
@@ -85,7 +85,7 @@ jobs:
 
   docker-build:
     name: Docker build & smoke test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
@@ -125,7 +125,7 @@ jobs:
   # chromadb advisory (no fix published upstream) is resolved.
   security-audit:
     name: Dependency audit (advisory)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
